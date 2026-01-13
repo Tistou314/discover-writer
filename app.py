@@ -444,7 +444,7 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
 [ARTICLE COMPLET EN MARKDOWN]
 ```"""
 
-    esponse = client.messages.create(
+    response = client.messages.create(
     model="claude-opus-4-5-20251101",
     max_tokens=5000,
     temperature=0.7,
