@@ -5,6 +5,12 @@ import anthropic
 from typing import List, Dict
 import time
 
+# Charger les secrets si disponibles
+if hasattr(st, 'secrets') and 'ANTHROPIC_API_KEY' in st.secrets:
+    st.session_state['anthropic_key'] = st.secrets['ANTHROPIC_API_KEY']
+    st.session_state['serper_key'] = st.secrets['SERPER_API_KEY']
+    st.session_state['api_configured'] = True
+
 # ============================================
 # CONFIGURATION
 # ============================================
