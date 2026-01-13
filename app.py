@@ -372,6 +372,12 @@ Contenu:
 - Listes à puces réservées aux énumérations concrètes
 - Le texte explicatif reste en prose fluide
 
+**Enrichissements conditionnels (UNIQUEMENT si pertinent) :**
+- **Tableau** : si données chiffrées comparables (prix, specs, dates, stats) → tableau Markdown clair
+- **Liste à puces** : si étapes séquentielles ou critères à cocher
+- **Aucun des deux** : si contenu éditorial, narratif ou lifestyle → prose fluide uniquement
+
+Règle : ne jamais forcer un tableau ou une liste pour "meubler". Si tu hésites, choisis la prose.
 **Enrichissement :**
 - Intègre naturellement les ENTITÉS liées au sujet (personnes, lieux, marques, concepts techniques)
 - Données chiffrées quand disponibles
