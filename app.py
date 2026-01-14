@@ -378,7 +378,8 @@ Contenu:
 - **Aucun des deux** : si contenu éditorial, narratif ou lifestyle → prose fluide uniquement
 
 Règle : ne jamais forcer un tableau ou une liste pour "meubler". Si tu hésites, choisis la prose.
-**Enrichissement :**
+
+**Enrichissement sémantique :**
 - Intègre naturellement les ENTITÉS liées au sujet (personnes, lieux, marques, concepts techniques)
 - Données chiffrées quand disponibles
 - L'objectif : montrer une expertise qui va au-delà des mots-clés évidents
@@ -390,11 +391,12 @@ Règle : ne jamais forcer un tableau ou une liste pour "meubler". Si tu hésites
 
 **Longueur :** Adapte au sujet (600-2000 mots selon complexité)
 
-**À BANNIR :**
+**À BANNIR ABSOLUMENT :**
 - Tournures IA : "Il est important de noter", "Dans cet article", "N'hésitez pas"
 - Phrases > 30 mots
 - Intros génériques sans accroche
-- Remplissage"""
+- Remplissage
+- Liens et URLs : jamais de [texte](url), jamais d'URL brute, jamais de "source" cliquable"""
 
     user_prompt = f"""Analyse ces {len(sources)} sources sur "{keyword}" et rédige un article optimisé Discover.
 
@@ -433,6 +435,7 @@ Propose 1 meta description :
 5. Intègre les entités naturellement
 6. Utilise le gras sur les mots-clés stratégiques
 7. Termine sur une note mémorable
+8. AUCUN LIEN dans l'article (ni [texte](url) ni URL brute)
 
 {f"Instructions supplémentaires : {custom_instructions}" if custom_instructions else ""}
 
@@ -453,13 +456,13 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
 
 ---
 
-[ARTICLE COMPLET EN MARKDOWN]
+[ARTICLE COMPLET EN MARKDOWN SANS AUCUN LIEN]
 ```"""
 
     response = client.messages.create(
-    model="claude-opus-4-5-20251101",
-    max_tokens=5000,
-    temperature=0.7,
+        model="claude-opus-4-5-20251101",
+        max_tokens=5000,
+        temperature=0.7,
         messages=[
             {"role": "user", "content": user_prompt}
         ],
