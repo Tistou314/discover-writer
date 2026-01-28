@@ -278,6 +278,31 @@ st.markdown("""
         background: white !important;
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
+    
+    /* Radio buttons for mode selection */
+    .stRadio > div {
+        display: flex;
+        gap: 1rem;
+    }
+    
+    .stRadio > div > label {
+        background: #f8fafc;
+        padding: 0.75rem 1.25rem;
+        border-radius: 10px;
+        border: 2px solid #e2e8f0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .stRadio > div > label:hover {
+        border-color: #667eea;
+    }
+    
+    .stRadio > div > label[data-checked="true"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-color: transparent;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -330,6 +355,17 @@ def fetch_content_jina(url: str) -> str:
         return content
     except Exception as e:
         return f"Erreur lors de la récupération: {str(e)}"
+
+
+def extract_title_from_url(url: str) -> str:
+    """Extrait un titre simple depuis l'URL"""
+    # Enlever le protocole et www
+    title = url.replace("https://", "").replace("http://", "").replace("www.", "")
+    # Prendre le domaine + début du path
+    parts = title.split("/")
+    if len(parts) > 1 and parts[1]:
+        return f"{parts[0]} - {parts[1][:30]}"
+    return parts[0]
 
 
 def generate_article(
@@ -511,21 +547,59 @@ with st.expander("⚙️ Configuration API", expanded=not st.session_state.get('
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown('<div class="card-title">📝 Nouveau contenu</div>', unsafe_allow_html=True)
 
-# Input principal
-keyword = st.text_input(
-    "Mot-clé ou sujet",
-    placeholder="Ex: tendances mode été 2025, recettes healthy rapides...",
-    label_visibility="collapsed"
+# Sélecteur de mode
+mode = st.radio(
+    "Mode de sourcing",
+    ["🔍 Recherche automatique", "🔗 URLs manuelles"],
+    horizontal=True,
+    help="Recherche auto : trouve les meilleures sources via Google. URLs manuelles : choisis tes propres sources."
 )
 
-# Options avancées
-col1, col2 = st.columns(2)
-with col1:
-    num_sources = st.slider("Nombre de sources à analyser", min_value=3, max_value=10, value=5)
-with col2:
-    pass  # Espace pour équilibrer
+# Variables pour stocker les inputs selon le mode
+keyword = ""
+manual_urls = []
+num_sources = 5
 
-# Instructions personnalisées (optionnel)
+if mode == "🔍 Recherche automatique":
+    # Mode recherche : input topic + slider nombre de sources
+    keyword = st.text_input(
+        "Mot-clé ou sujet",
+        placeholder="Ex: tendances mode été 2025, recettes healthy rapides...",
+        label_visibility="collapsed"
+    )
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        num_sources = st.slider("Nombre de sources à analyser", min_value=3, max_value=10, value=5)
+    with col2:
+        pass  # Espace pour équilibrer
+
+else:
+    # Mode URLs manuelles
+    st.markdown("**Colle entre 2 et 5 URLs sources :**")
+    
+    # Sujet/angle pour l'article (obligatoire en mode manuel)
+    keyword = st.text_input(
+        "Sujet ou angle de l'article",
+        placeholder="Ex: comparatif smartphones 2025, guide débutant yoga...",
+        help="Indique le sujet principal pour guider la rédaction"
+    )
+    
+    # Champs URLs dynamiques
+    url_inputs = []
+    for i in range(5):
+        url = st.text_input(
+            f"URL {i+1}" + (" (obligatoire)" if i < 2 else " (optionnel)"),
+            placeholder=f"https://exemple.com/article-{i+1}",
+            key=f"url_{i}",
+            label_visibility="visible" if i < 2 else "visible"
+        )
+        if url.strip():
+            url_inputs.append(url.strip())
+    
+    manual_urls = url_inputs
+
+# Instructions personnalisées (optionnel) - commun aux deux modes
 custom_instructions = st.text_area(
     "Instructions supplémentaires (optionnel)",
     placeholder="Ex: Angle lifestyle, ton décontracté, mentionner les prix...",
@@ -542,18 +616,39 @@ generate_button = st.button("✨ Générer l'article", use_container_width=True)
 # ============================================
 
 if generate_button:
-    # Vérifications
-    if not st.session_state.get('anthropic_key') or not st.session_state.get('serper_key'):
-        st.error("⚠️ Configure d'abord tes clés API dans les paramètres ci-dessus")
-    elif not keyword:
-        st.warning("💡 Entre un mot-clé ou un sujet pour commencer")
+    # Vérifications selon le mode
+    if mode == "🔍 Recherche automatique":
+        if not st.session_state.get('anthropic_key') or not st.session_state.get('serper_key'):
+            st.error("⚠️ Configure d'abord tes clés API dans les paramètres ci-dessus")
+            st.stop()
+        elif not keyword:
+            st.warning("💡 Entre un mot-clé ou un sujet pour commencer")
+            st.stop()
     else:
-        # Initialiser le client Anthropic
-        client = anthropic.Anthropic(api_key=st.session_state['anthropic_key'])
-        
-        # Container pour les étapes
-        progress_container = st.container()
-        
+        # Mode URLs manuelles
+        if not st.session_state.get('anthropic_key'):
+            st.error("⚠️ Configure d'abord ta clé API Anthropic dans les paramètres ci-dessus")
+            st.stop()
+        elif not keyword:
+            st.warning("💡 Entre un sujet ou angle pour l'article")
+            st.stop()
+        elif len(manual_urls) < 2:
+            st.warning("💡 Entre au moins 2 URLs sources")
+            st.stop()
+        # Validation basique des URLs
+        invalid_urls = [u for u in manual_urls if not (u.startswith("http://") or u.startswith("https://"))]
+        if invalid_urls:
+            st.error(f"⚠️ URLs invalides (doivent commencer par http:// ou https://) : {', '.join(invalid_urls)}")
+            st.stop()
+    
+    # Initialiser le client Anthropic
+    client = anthropic.Anthropic(api_key=st.session_state['anthropic_key'])
+    
+    # Container pour les étapes
+    progress_container = st.container()
+    
+    if mode == "🔍 Recherche automatique":
+        # === MODE RECHERCHE AUTOMATIQUE ===
         with progress_container:
             # Étape 1 : Recherche
             st.markdown("""
@@ -565,7 +660,7 @@ if generate_button:
             
             try:
                 sources = search_serper(keyword, st.session_state['serper_key'], num_sources)
-                time.sleep(0.3)  # Petite pause pour l'UX
+                time.sleep(0.3)
             except Exception as e:
                 st.error(f"Erreur lors de la recherche : {str(e)}")
                 st.stop()
@@ -580,7 +675,6 @@ if generate_button:
             </div>
             """, unsafe_allow_html=True)
             
-            # Progress bar pour le fetch
             progress_bar = st.progress(0)
             
             contents = []
@@ -593,136 +687,171 @@ if generate_button:
                 
                 progress_bar.progress((i + 1) / len(sources))
                 time.sleep(0.1)
+    
+    else:
+        # === MODE URLs MANUELLES ===
+        # Construire la liste des sources à partir des URLs
+        sources = [{"title": extract_title_from_url(url), "url": url, "snippet": ""} for url in manual_urls]
         
-        # Clear et afficher étape 3
-        progress_container.empty()
         with progress_container:
-            st.markdown("""
+            st.markdown(f"""
             <div class="step-indicator">
                 <div class="step-dot"></div>
-                <span class="step-text">Rédaction de l'article...</span>
+                <span class="step-text">Analyse de {len(sources)} sources en cours...</span>
             </div>
             """, unsafe_allow_html=True)
             
+            progress_bar = st.progress(0)
+            
+            contents = []
+            for i, source in enumerate(sources):
+                try:
+                    content = fetch_content_jina(source['url'])
+                    contents.append(content)
+                    # Mettre à jour le titre avec celui extrait du contenu si possible
+                    if content and not content.startswith("Erreur"):
+                        # Essayer d'extraire le titre du contenu Jina (généralement en première ligne)
+                        first_lines = content.split('\n')[:5]
+                        for line in first_lines:
+                            line = line.strip()
+                            if line and not line.startswith('http') and len(line) > 10 and len(line) < 200:
+                                sources[i]['title'] = line[:80]
+                                break
+                except Exception as e:
+                    contents.append(f"Contenu non disponible: {str(e)}")
+                
+                progress_bar.progress((i + 1) / len(sources))
+                time.sleep(0.1)
+    
+    # Clear et afficher étape génération (commun aux deux modes)
+    progress_container.empty()
+    with progress_container:
+        st.markdown("""
+        <div class="step-indicator">
+            <div class="step-dot"></div>
+            <span class="step-text">Rédaction de l'article...</span>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        try:
+            article = generate_article(
+                client,
+                keyword,
+                sources,
+                contents,
+                custom_instructions
+            )
+        except Exception as e:
+            st.error(f"Erreur lors de la génération : {str(e)}")
+            st.stop()
+    
+    # Clear progress et afficher résultat
+    progress_container.empty()
+    
+    # Parser le résultat pour séparer métadonnées et article
+    def parse_result(result):
+        """Sépare les métadonnées SEO de l'article"""
+        meta = {"titres": [], "title_seo": "", "meta_desc": ""}
+        article_content = result
+        
+        # Extraire les titres H1
+        if "## TITRES" in result or "## TITRES (H1)" in result:
             try:
-                article = generate_article(
-                    client,
-                    keyword,
-                    sources,
-                    contents,
-                    custom_instructions
-                )
-            except Exception as e:
-                st.error(f"Erreur lors de la génération : {str(e)}")
-                st.stop()
+                titres_section = result.split("## TITLE SEO")[0]
+                titres_section = titres_section.split("## TITRES")[-1]
+                lines = [l.strip() for l in titres_section.strip().split("\n") if l.strip() and l.strip()[0].isdigit()]
+                meta["titres"] = lines[:5]
+            except:
+                pass
         
-        # Clear progress et afficher résultat
-        progress_container.empty()
+        # Extraire le title SEO
+        if "## TITLE SEO" in result:
+            try:
+                title_section = result.split("## TITLE SEO")[1].split("##")[0]
+                meta["title_seo"] = title_section.strip().split("\n")[0].strip()
+            except:
+                pass
         
-        # Parser le résultat pour séparer métadonnées et article
-        def parse_result(result):
-            """Sépare les métadonnées SEO de l'article"""
-            meta = {"titres": [], "title_seo": "", "meta_desc": ""}
-            article_content = result
-            
-            # Extraire les titres H1
-            if "## TITRES" in result or "## TITRES (H1)" in result:
-                try:
-                    titres_section = result.split("## TITLE SEO")[0]
-                    titres_section = titres_section.split("## TITRES")[-1]
-                    lines = [l.strip() for l in titres_section.strip().split("\n") if l.strip() and l.strip()[0].isdigit()]
-                    meta["titres"] = lines[:5]
-                except:
-                    pass
-            
-            # Extraire le title SEO
-            if "## TITLE SEO" in result:
-                try:
-                    title_section = result.split("## TITLE SEO")[1].split("##")[0]
-                    meta["title_seo"] = title_section.strip().split("\n")[0].strip()
-                except:
-                    pass
-            
-            # Extraire la meta description
-            if "## META DESCRIPTION" in result:
-                try:
-                    meta_section = result.split("## META DESCRIPTION")[1].split("---")[0]
-                    meta["meta_desc"] = meta_section.strip().split("\n")[0].strip()
-                except:
-                    pass
-            
-            # Extraire l'article (après le ---)
-            if "---" in result:
-                parts = result.split("---")
-                if len(parts) > 1:
-                    article_content = "---".join(parts[1:]).strip()
-                    # Nettoyer les éventuels ``` résiduels
-                    article_content = article_content.replace("```", "").strip()
-            
-            return meta, article_content
+        # Extraire la meta description
+        if "## META DESCRIPTION" in result:
+            try:
+                meta_section = result.split("## META DESCRIPTION")[1].split("---")[0]
+                meta["meta_desc"] = meta_section.strip().split("\n")[0].strip()
+            except:
+                pass
         
-        meta, article_content = parse_result(article)
+        # Extraire l'article (après le ---)
+        if "---" in result:
+            parts = result.split("---")
+            if len(parts) > 1:
+                article_content = "---".join(parts[1:]).strip()
+                # Nettoyer les éventuels ``` résiduels
+                article_content = article_content.replace("```", "").strip()
         
-        # Affichage des métadonnées SEO
-        st.markdown("""
-        <div class="result-card">
-            <div class="result-header">
-                <span class="result-title">🎯 Métadonnées SEO</span>
-                <span class="success-badge">✓ Prêt</span>
-            </div>
+        return meta, article_content
+    
+    meta, article_content = parse_result(article)
+    
+    # Affichage des métadonnées SEO
+    st.markdown("""
+    <div class="result-card">
+        <div class="result-header">
+            <span class="result-title">🎯 Métadonnées SEO</span>
+            <span class="success-badge">✓ Prêt</span>
         </div>
-        """, unsafe_allow_html=True)
-        
-        # Titres H1
-        if meta["titres"]:
-            st.markdown("**Propositions de titres H1 :**")
-            for titre in meta["titres"]:
-                st.markdown(f"- {titre}")
-        
-        # Title SEO et Meta Description côte à côte
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("**Title SEO :**")
-            if meta["title_seo"]:
-                st.code(meta["title_seo"], language=None)
-            else:
-                st.info("Non détecté")
-        
-        with col2:
-            st.markdown("**Meta Description :**")
-            if meta["meta_desc"]:
-                st.code(meta["meta_desc"], language=None)
-            else:
-                st.info("Non détectée")
-        
-        st.markdown("---")
-        
-        # Affichage de l'article
-        st.markdown("""
-        <div class="result-card">
-            <div class="result-header">
-                <span class="result-title">📄 Article</span>
-            </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Titres H1
+    if meta["titres"]:
+        st.markdown("**Propositions de titres H1 :**")
+        for titre in meta["titres"]:
+            st.markdown(f"- {titre}")
+    
+    # Title SEO et Meta Description côte à côte
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Title SEO :**")
+        if meta["title_seo"]:
+            st.code(meta["title_seo"], language=None)
+        else:
+            st.info("Non détecté")
+    
+    with col2:
+        st.markdown("**Meta Description :**")
+        if meta["meta_desc"]:
+            st.code(meta["meta_desc"], language=None)
+        else:
+            st.info("Non détectée")
+    
+    st.markdown("---")
+    
+    # Affichage de l'article
+    st.markdown("""
+    <div class="result-card">
+        <div class="result-header">
+            <span class="result-title">📄 Article</span>
         </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown(article_content)
-        
-        # Sources utilisées
-        st.markdown("---")
-        st.markdown("**Sources analysées :**")
-        sources_html = ""
-        for source in sources:
-            sources_html += f'<span class="source-pill">{source["title"][:40]}...</span>'
-        st.markdown(f'<div style="margin-top: 0.5rem;">{sources_html}</div>', unsafe_allow_html=True)
-        
-        # Boutons copier
-        with st.expander("📋 Copier le contenu"):
-            tab1, tab2 = st.tabs(["Article seul", "Tout (métadonnées + article)"])
-            with tab1:
-                st.code(article_content, language="markdown")
-            with tab2:
-                st.code(article, language="markdown")
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(article_content)
+    
+    # Sources utilisées
+    st.markdown("---")
+    st.markdown("**Sources analysées :**")
+    sources_html = ""
+    for source in sources:
+        sources_html += f'<span class="source-pill">{source["title"][:40]}...</span>'
+    st.markdown(f'<div style="margin-top: 0.5rem;">{sources_html}</div>', unsafe_allow_html=True)
+    
+    # Boutons copier
+    with st.expander("📋 Copier le contenu"):
+        tab1, tab2 = st.tabs(["Article seul", "Tout (métadonnées + article)"])
+        with tab1:
+            st.code(article_content, language="markdown")
+        with tab2:
+            st.code(article, language="markdown")
 
 # Footer discret
 st.markdown("""
