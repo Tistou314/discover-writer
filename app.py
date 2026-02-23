@@ -496,7 +496,7 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
 ```"""
 
     response = client.messages.create(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5-20250929",
         max_tokens=5000,
         temperature=0.7,
         messages=[
