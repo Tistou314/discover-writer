@@ -448,7 +448,11 @@ Adapte au sujet (600-2000 mots). Certaines sections peuvent faire 3 lignes si le
 - Remplissage et reformulations qui n'apportent rien
 - Liens et URLs : jamais de [texte](url), jamais d'URL brute, jamais de "source" cliquable
 - Commencer un paragraphe par "Il est" ou "Il faut"
-- Utiliser "Certes... mais" plus d'une fois dans un article"""
+- Utiliser "Certes... mais" plus d'une fois dans un article
+
+## CONTEXTE TEMPOREL
+
+Nous sommes en 2026. Adapte toutes les références temporelles en conséquence. Ne mentionne jamais 2025 comme étant l'année en cours."""
 
     user_prompt = f"""Analyse ces {len(sources)} sources sur "{keyword}" et rédige un article optimisé Discover.
 
@@ -586,7 +590,7 @@ if mode == "🔍 Recherche automatique":
     """, unsafe_allow_html=True)
     keyword = st.text_input(
         "Thème à traiter",
-        placeholder="Ex: tendances mode été 2025, recettes healthy rapides...",
+        placeholder="Ex: tendances mode été 2026, recettes healthy rapides...",
         label_visibility="collapsed"
     )
     
@@ -608,7 +612,7 @@ else:
     """, unsafe_allow_html=True)
     keyword = st.text_input(
         "Thème à traiter",
-        placeholder="Ex: comparatif smartphones 2025, guide débutant yoga...",
+        placeholder="Ex: comparatif smartphones 2026, guide débutant yoga...",
         help="Indique le sujet principal pour guider la rédaction",
         label_visibility="collapsed"
     )
