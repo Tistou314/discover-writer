@@ -561,9 +561,8 @@ if not st.session_state.get('api_configured', False):
             st.session_state['api_configured'] = True
             st.rerun()
 
-# Card principale
-st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="card-title">📝 Nouveau contenu</div>', unsafe_allow_html=True)
+# Titre section principale
+st.markdown('<div class="card-title" style="margin-top: 0.5rem;">📝 Nouveau contenu</div>', unsafe_allow_html=True)
 
 # Sélecteur de mode
 mode = st.radio(
@@ -642,7 +641,6 @@ custom_instructions = st.text_area(
     label_visibility="collapsed"
 )
 
-st.markdown('</div>', unsafe_allow_html=True)
 
 # Bouton de génération
 generate_button = st.button("✨ Générer l'article", use_container_width=True)
