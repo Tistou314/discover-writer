@@ -578,8 +578,13 @@ num_sources = 5
 
 if mode == "🔍 Recherche automatique":
     # Mode recherche : input topic + slider nombre de sources
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea15, #764ba215); border-left: 4px solid #667eea; border-radius: 0 12px 12px 0; padding: 1rem 1.25rem; margin-bottom: 0.5rem;">
+        <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">🎯 Thème à traiter</span>
+    </div>
+    """, unsafe_allow_html=True)
     keyword = st.text_input(
-        "Mot-clé ou sujet",
+        "Thème à traiter",
         placeholder="Ex: tendances mode été 2025, recettes healthy rapides...",
         label_visibility="collapsed"
     )
@@ -595,10 +600,16 @@ else:
     st.markdown("**Colle entre 2 et 5 URLs sources :**")
     
     # Sujet/angle pour l'article (obligatoire en mode manuel)
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea15, #764ba215); border-left: 4px solid #667eea; border-radius: 0 12px 12px 0; padding: 1rem 1.25rem; margin-bottom: 0.5rem;">
+        <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">🎯 Thème à traiter</span>
+    </div>
+    """, unsafe_allow_html=True)
     keyword = st.text_input(
-        "Sujet ou angle de l'article",
+        "Thème à traiter",
         placeholder="Ex: comparatif smartphones 2025, guide débutant yoga...",
-        help="Indique le sujet principal pour guider la rédaction"
+        help="Indique le sujet principal pour guider la rédaction",
+        label_visibility="collapsed"
     )
     
     # Champs URLs dynamiques
@@ -615,11 +626,18 @@ else:
     
     manual_urls = url_inputs
 
-# Instructions personnalisées (optionnel) - commun aux deux modes
+# Persona et consignes complémentaires - commun aux deux modes
+st.markdown("""
+<div style="background: linear-gradient(135deg, #f59e0b15, #d9740015); border-left: 4px solid #f59e0b; border-radius: 0 12px 12px 0; padding: 1rem 1.25rem; margin-bottom: 0.5rem;">
+    <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">✍️ Persona et consignes complémentaires</span>
+    <span style="font-size: 0.85rem; color: #64748b; margin-left: 0.5rem;">optionnel</span>
+</div>
+""", unsafe_allow_html=True)
 custom_instructions = st.text_area(
-    "Instructions supplémentaires (optionnel)",
-    placeholder="Ex: Angle lifestyle, ton décontracté, mentionner les prix...",
-    height=80
+    "Persona et consignes complémentaires",
+    placeholder="Ex: Tu es un expert nutrition sportive. Ton décontracté, tutoiement, mentionner les prix...",
+    height=100,
+    label_visibility="collapsed"
 )
 
 st.markdown('</div>', unsafe_allow_html=True)
