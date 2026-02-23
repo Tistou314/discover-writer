@@ -536,28 +536,30 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Configuration API (dans un expander discret)
-with st.expander("⚙️ Configuration API", expanded=not st.session_state.get('api_configured', False)):
-    col1, col2 = st.columns(2)
-    with col1:
-        anthropic_key = st.text_input(
-            "Clé API Anthropic",
-            type="password",
-            value=st.session_state.get('anthropic_key', ''),
-            help="Récupère ta clé sur console.anthropic.com"
-        )
-    with col2:
-        serper_key = st.text_input(
-            "Clé API Serper",
-            type="password",
-            value=st.session_state.get('serper_key', ''),
-            help="Récupère ta clé sur serper.dev (gratuit pour commencer)"
-        )
-    
-    if anthropic_key and serper_key:
-        st.session_state['anthropic_key'] = anthropic_key
-        st.session_state['serper_key'] = serper_key
-        st.session_state['api_configured'] = True
+# Configuration API (masquée si déjà configurée via secrets)
+if not st.session_state.get('api_configured', False):
+    with st.expander("⚙️ Configuration API", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            anthropic_key = st.text_input(
+                "Clé API Anthropic",
+                type="password",
+                value=st.session_state.get('anthropic_key', ''),
+                help="Récupère ta clé sur console.anthropic.com"
+            )
+        with col2:
+            serper_key = st.text_input(
+                "Clé API Serper",
+                type="password",
+                value=st.session_state.get('serper_key', ''),
+                help="Récupère ta clé sur serper.dev (gratuit pour commencer)"
+            )
+        
+        if anthropic_key and serper_key:
+            st.session_state['anthropic_key'] = anthropic_key
+            st.session_state['serper_key'] = serper_key
+            st.session_state['api_configured'] = True
+            st.rerun()
 
 # Card principale
 st.markdown('<div class="card">', unsafe_allow_html=True)
