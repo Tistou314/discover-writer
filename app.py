@@ -373,7 +373,8 @@ def generate_article(
     keyword: str,
     sources: List[Dict],
     contents: List[str],
-    custom_instructions: str = ""
+    custom_instructions: str = "",
+    article_length: int = 800
 ) -> str:
     """Génère l'article via Claude"""
     
@@ -389,7 +390,7 @@ Contenu:
 
 """
     
-    system_prompt = """Tu es un rédacteur web senior avec 15 ans d'expérience. Tu écris comme un humain, pas comme une IA.
+    system_prompt = f"""Tu es un rédacteur web senior avec 15 ans d'expérience. Tu écris comme un humain, pas comme une IA.
 
 ## RÈGLE N°1 : VARIANCE STRUCTURELLE OBLIGATOIRE
 
@@ -438,7 +439,7 @@ INTERDIT : que deux sections consécutives aient la même structure interne (ex 
 
 ## LONGUEUR
 
-Adapte au sujet (600-2000 mots). Certaines sections peuvent faire 3 lignes si le sujet ne mérite pas plus. Ne remplis JAMAIS pour atteindre une longueur.
+L'article doit faire environ {article_length} mots. C'est une cible, pas un minimum à atteindre coûte que coûte. Si le sujet est couvert en moins, arrête-toi. Ne remplis JAMAIS pour atteindre une longueur.
 
 ## À BANNIR ABSOLUMENT
 
@@ -494,6 +495,8 @@ Propose 1 meta description :
 8. AUCUN LIEN dans l'article (ni [texte](url) ni URL brute)
 
 {f"Instructions supplémentaires : {custom_instructions}" if custom_instructions else ""}
+
+CONTRAINTE DE LONGUEUR : L'article (hors métadonnées) doit faire environ {article_length} mots. Vise cette cible précisément. Si tu es au-dessus, coupe. Si tu es en dessous sans remplissage possible, c'est OK.
 
 FORMAT DE RÉPONSE OBLIGATOIRE :
 ```
@@ -630,6 +633,9 @@ else:
             url_inputs.append(url.strip())
     
     manual_urls = url_inputs
+
+# Longueur de l'article - commun aux deux modes
+article_length = st.slider("📏 Longueur de l'article (en mots)", min_value=300, max_value=2000, value=800, step=100)
 
 # Persona et consignes complémentaires - commun aux deux modes
 st.markdown("""
@@ -777,7 +783,8 @@ if generate_button:
                 keyword,
                 sources,
                 contents,
-                custom_instructions
+                custom_instructions,
+                article_length
             )
         except Exception as e:
             st.error(f"Erreur lors de la génération : {str(e)}")
@@ -864,11 +871,25 @@ if generate_button:
     
     st.markdown("---")
     
-    # Affichage de l'article
-    st.markdown("""
+    # Affichage de l'article avec compteur de mots
+    word_count = len(article_content.split())
+    
+    # Couleur du badge selon écart à la cible
+    if abs(word_count - article_length) <= article_length * 0.15:
+        count_color = "#10b981"  # vert
+        count_label = "✓"
+    elif word_count > article_length:
+        count_color = "#f59e0b"  # orange
+        count_label = "⚠ long"
+    else:
+        count_color = "#f59e0b"  # orange
+        count_label = "⚠ court"
+    
+    st.markdown(f"""
     <div class="result-card">
         <div class="result-header">
             <span class="result-title">📄 Article</span>
+            <span style="background: {count_color}; color: white; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">{word_count} mots {count_label}</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
