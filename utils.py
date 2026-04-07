@@ -2,8 +2,8 @@
 
 
 def parse_article_result(result: str) -> tuple:
-    """Sépare les métadonnées SEO de l'article généré."""
-    meta = {"titres": [], "title_seo": "", "meta_desc": ""}
+    """Sépare les métadonnées SEO, le prompt image et l'article généré."""
+    meta = {"titres": [], "title_seo": "", "meta_desc": "", "image_prompt": ""}
     article_content = result
 
     if "## TITRES" in result or "## TITRES (H1)" in result:
@@ -24,8 +24,20 @@ def parse_article_result(result: str) -> tuple:
 
     if "## META DESCRIPTION" in result:
         try:
-            meta_section = result.split("## META DESCRIPTION")[1].split("---")[0]
+            meta_section = result.split("## META DESCRIPTION")[1].split("##")[0]
             meta["meta_desc"] = meta_section.strip().split("\n")[0].strip()
+        except:
+            pass
+
+    if "## IMAGE" in result:
+        try:
+            image_section = result.split("## IMAGE")[1].split("---")[0]
+            # Nettoyer : retirer le titre "À LA UNE" s'il reste
+            image_text = image_section.strip()
+            for prefix in ["À LA UNE", "A LA UNE"]:
+                if image_text.upper().startswith(prefix):
+                    image_text = image_text[len(prefix):].strip()
+            meta["image_prompt"] = image_text.strip()
         except:
             pass
 
