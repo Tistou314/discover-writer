@@ -568,11 +568,13 @@ Style "sec" INTERDIT sauf demande explicite du persona :
 
 Tu rédiges un article journalistique, pas un texte créatif. La précision factuelle est NON NÉGOCIABLE :
 
-- **Ne cite que des chiffres, dates, noms et faits présents dans les sources fournies.** Si une info n'est pas dans les sources, ne l'invente pas.
-- **Si tu n'as pas de chiffre précis, ne fabrique pas de pourcentage ou de statistique.** Utilise des formulations qualitatives : "une part significative", "un nombre croissant", "selon plusieurs acteurs du secteur".
+- **Ne cite que des chiffres, dates, noms et faits présents TEXTUELLEMENT dans les sources fournies.** Si une info n'est pas dans les sources, ne l'invente pas.
+- **INTERDIT DE CALCULER, EXTRAPOLER OU ARRONDIR DES CHIFFRES.** Ne fais jamais de calcul à partir de données sources pour en déduire un nouveau chiffre (ex : appliquer un taux de revalorisation à un barème ancien pour obtenir un barème "à jour"). Si le chiffre exact n'est pas dans les sources, ne le donne pas.
+- **Si tu n'as pas de chiffre précis, ne fabrique pas de pourcentage ou de statistique.** Utilise des formulations qui renvoient à la source officielle : "selon les barèmes officiels de l'Anah", "consultez le simulateur sur maprimerenov.gouv.fr", "les plafonds varient selon la composition du foyer et la localisation".
+- **Pour les barèmes, grilles tarifaires, seuils de revenus** : ne les cite que si tu les trouves mot pour mot dans les sources. Sinon, décris le mécanisme général et renvoie vers la source officielle du sujet. Un tableau avec des chiffres faux est pire qu'un paragraphe qui renvoie vers le site de référence.
 - **Distingue les faits des interprétations.** Les faits viennent des sources. Tes mises en perspective doivent être formulées comme telles ("ce qui suggère que...", "on peut y voir...").
 - **En cas de doute sur un fait, formulation prudente** plutôt qu'affirmation.
-- **Chaque donnée chiffrée doit être contextualisée** : d'où elle vient, à quelle période elle se rapporte.
+- **Chaque donnée chiffrée doit être contextualisée** : d'où elle vient (quel acteur, quelle source), à quelle période elle se rapporte.
 
 ## LONGUEUR
 
@@ -712,7 +714,13 @@ MISSION 3 — CORRECTION : produire une version corrigée de l'article qui :
 PRINCIPES :
 - EXHAUSTIF sur les faits ET les omissions
 - CONSERVATEUR sur le style : ne touche qu'au fond factuel, jamais au ton ni à la structure
-- Pour les ajouts de complétude, insère-les dans la section la plus pertinente, dans le même style que l'auteur"""
+- Pour les ajouts de complétude, insère-les dans la section la plus pertinente, dans le même style que l'auteur
+
+RÈGLE SPÉCIALE CHIFFRES ET DONNÉES :
+- Pour chaque donnée chiffrée de l'article (barème, seuil, plafond, montant, pourcentage, date), vérifie qu'elle apparaît EXACTEMENT et TEXTUELLEMENT dans au moins une source.
+- Un chiffre "proche", "plausible" ou "cohérent avec une revalorisation" n'est PAS confirmé. Marque-le ❌ INEXACT ou ⚠️ NON SOURCÉ.
+- Si un chiffre de l'article diffère même légèrement d'une source (ex : 17 363 € dans l'article vs 17 173 € dans la source), c'est une ERREUR, pas un arrondi acceptable.
+- Dans la version corrigée, remplace les chiffres non confirmés par une formulation qui renvoie à la source officielle, ou par le chiffre exact trouvé dans les sources. Ne laisse JAMAIS un chiffre douteux dans l'article corrigé."""
 
     user_prompt = f"""Voici un article sur "{keyword}". Vérifie-le contre les sources d'actualité ci-dessous, contrôle sa complétude, puis produis la version corrigée.
 
