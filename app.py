@@ -442,20 +442,28 @@ def fetch_news_for_fact_check(keyword: str, api_key: str) -> Tuple[List[Dict], L
     return all_news, news_contents
 
 
-def fetch_content_jina(url: str) -> str:
-    """Récupère le contenu d'une page via Jina Reader (gratuit)"""
+def fetch_content_jina(url: str, max_chars: int = 25000) -> str:
+    """Récupère le contenu d'une page via Jina Reader en Markdown (préserve les tableaux)"""
     jina_url = f"https://r.jina.ai/{url}"
     headers = {
-        "Accept": "text/plain"
+        "Accept": "text/markdown",
+        "X-Return-Format": "markdown"
     }
     
     try:
         response = requests.get(jina_url, headers=headers, timeout=30)
         response.raise_for_status()
-        content = response.text[:15000]
+        content = response.text[:max_chars]
         return content
     except Exception as e:
-        return f"Erreur lors de la récupération: {str(e)}"
+        # Fallback en text/plain si le markdown échoue
+        try:
+            headers_fallback = {"Accept": "text/plain"}
+            response = requests.get(jina_url, headers=headers_fallback, timeout=30)
+            response.raise_for_status()
+            return response.text[:max_chars]
+        except Exception as e2:
+            return f"Erreur lors de la récupération: {str(e2)}"
 
 
 def extract_title_from_url(url: str) -> str:
@@ -489,7 +497,7 @@ def generate_article(
 Titre: {source['title']}
 URL: {source['url']}
 Contenu:
-{content[:8000]}
+{content[:12000]}
 
 """
     
@@ -694,7 +702,7 @@ def fact_check_and_correct(
 --- SOURCE {i} : {source['title']}{date_info} ---
 URL: {source['url']}
 Contenu:
-{content[:8000]}
+{content[:12000]}
 
 """
     
