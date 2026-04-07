@@ -212,6 +212,9 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
 ## META DESCRIPTION
 [meta description] (XXX caractères)
 
+## IMAGE À LA UNE
+[Un prompt en anglais pour générer l'image à la une de l'article au format 16:9. Le prompt doit décrire une scène éditoriale photographique ou illustrative, cohérente avec le sujet de l'article. Sois précis sur : le sujet principal de l'image, la composition, l'ambiance lumineuse, le style visuel (photo réaliste, illustration flat, etc.), les couleurs dominantes. Évite les textes dans l'image, les visages reconnaissables et les logos de marques. Le prompt doit faire 2-4 phrases maximum.]
+
 ---
 
 [ARTICLE COMPLET EN MARKDOWN SANS AUCUN LIEN]
