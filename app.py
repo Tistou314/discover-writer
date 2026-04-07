@@ -404,42 +404,68 @@ def search_serper_news(query: str, api_key: str, num_results: int = 5) -> List[D
         return []
 
 
-def fetch_news_for_fact_check(keyword: str, api_key: str) -> Tuple[List[Dict], List[str]]:
+def fetch_sources_for_fact_check(keyword: str, api_key: str) -> Tuple[List[Dict], List[str]]:
     """
-    Lance 2-3 recherches Google Actualités ciblées sur le sujet,
-    scrappe les meilleurs résultats et retourne (sources_news, contenus_news).
+    Récupère des sources indépendantes pour le fact-check en croisant :
+    - Google Actualités (articles récents, changements, évolutions)
+    - SERP classique (pages de référence, guides, sites institutionnels)
+    Retourne jusqu'à 6 sources dédupliquées avec leur contenu.
     """
-    # Générer des requêtes complémentaires ciblées sur les changements récents
-    queries = [
-        f"{keyword} 2026",
-        f"{keyword} 2026 changements nouveautés",
-        f"{keyword} ce qui change 2026",
-    ]
-    
-    # Collecter les URLs uniques depuis Google Actu
-    all_news = []
+    all_sources = []
     seen_urls = set()
     
-    for q in queries:
+    # --- SERP classique : pages de référence et guides ---
+    serp_queries = [
+        f"{keyword} 2026 conditions éligibilité",
+        f"{keyword} 2026 barème travaux éligibles",
+    ]
+    for q in serp_queries:
+        results = search_serper(q, api_key, num_results=3)
+        for r in results:
+            if r['url'] not in seen_urls:
+                seen_urls.add(r['url'])
+                r['source_type'] = 'serp'
+                all_sources.append(r)
+    
+    # --- Google Actualités : articles récents ---
+    news_queries = [
+        f"{keyword} 2026",
+        f"{keyword} 2026 changements nouveautés",
+    ]
+    for q in news_queries:
         results = search_serper_news(q, api_key, num_results=4)
         for r in results:
             if r['url'] not in seen_urls:
                 seen_urls.add(r['url'])
-                all_news.append(r)
+                r['source_type'] = 'news'
+                all_sources.append(r)
     
-    # Limiter à 4 articles max pour ne pas exploser les tokens
-    all_news = all_news[:4]
+    # Prendre 6 sources max : priorité à la diversité (alterner serp/news)
+    serp_sources = [s for s in all_sources if s.get('source_type') == 'serp']
+    news_sources = [s for s in all_sources if s.get('source_type') == 'news']
+    
+    # 3 serp + 3 news, ou plus de l'un si l'autre n'a pas assez
+    final_sources = []
+    final_sources.extend(serp_sources[:3])
+    final_sources.extend(news_sources[:3])
+    # Compléter jusqu'à 6 si un côté est court
+    remaining = 6 - len(final_sources)
+    if remaining > 0:
+        extras = [s for s in all_sources if s not in final_sources]
+        final_sources.extend(extras[:remaining])
+    
+    final_sources = final_sources[:6]
     
     # Scrapper le contenu
-    news_contents = []
-    for news in all_news:
+    fc_contents = []
+    for source in final_sources:
         try:
-            content = fetch_content_jina(news['url'])
-            news_contents.append(content)
+            content = fetch_content_jina(source['url'])
+            fc_contents.append(content)
         except Exception:
-            news_contents.append("Contenu non disponible")
+            fc_contents.append("Contenu non disponible")
     
-    return all_news, news_contents
+    return final_sources, fc_contents
 
 
 def fetch_content_jina(url: str, max_chars: int = 25000) -> str:
@@ -716,7 +742,11 @@ Contenu:
 
 """
     
-    system_prompt = """Tu es un fact-checker et correcteur éditorial rigoureux. Tu travailles avec des sources issues de Google Actualités, indépendantes de celles utilisées pour rédiger l'article. C'est ce qui te permet d'avoir un regard neuf.
+    system_prompt = """Tu es un fact-checker et correcteur éditorial rigoureux. Tu travailles avec deux types de sources indépendantes de celles utilisées pour rédiger l'article :
+- Des pages de référence issues de la SERP Google (guides, sites institutionnels, comparateurs)  
+- Des articles d'actualité récents issus de Google Actualités
+
+Cette double vérification te permet de croiser les informations de fond (règles, conditions, listes) avec les évolutions récentes (changements, exclusions, nouveautés).
 
 Tu as TROIS missions :
 
@@ -751,7 +781,7 @@ RÈGLE SPÉCIALE LISTES, CATÉGORIES ET EXCLUSIONS :
 ## ARTICLE À VÉRIFIER :
 {article}
 
-## SOURCES DE VÉRIFICATION (Google Actualités) :
+## SOURCES DE VÉRIFICATION (SERP + Google Actualités) :
 {sources_context}
 
 {f"Note : le style de l'article suit un persona éditorial spécifique. Respecte-le dans la version corrigée : {custom_instructions}" if custom_instructions else ""}
@@ -1134,11 +1164,11 @@ if generate_button:
                 st.markdown("""
                 <div class="step-indicator">
                     <div class="step-dot"></div>
-                    <span class="step-text">Recherche Google Actualités pour vérification...</span>
+                    <span class="step-text">Recherche de sources de vérification (SERP + Actualités)...</span>
                 </div>
                 """, unsafe_allow_html=True)
                 try:
-                    news_sources_fc, news_contents_fc = fetch_news_for_fact_check(
+                    news_sources_fc, news_contents_fc = fetch_sources_for_fact_check(
                         keyword, st.session_state['serper_key']
                     )
                 except Exception as e:
@@ -1152,7 +1182,7 @@ if generate_button:
                     st.markdown(f"""
                     <div class="step-indicator">
                         <div class="step-dot"></div>
-                        <span class="step-text">Vérification factuelle contre {len(news_sources_fc)} sources d'actualité...</span>
+                        <span class="step-text">Vérification factuelle contre {len(news_sources_fc)} sources indépendantes...</span>
                     </div>
                     """, unsafe_allow_html=True)
                     try:
@@ -1329,13 +1359,14 @@ if generate_button:
     for i, source in enumerate(sources, 1):
         st.markdown(f"{i}. **{source['title'][:60]}**  \n`{source['url']}`")
     
-    # Sources actu utilisées pour le fact-check
+    # Sources fact-check
     if news_sources_fc and len(news_sources_fc) > 0:
         st.markdown("")
-        st.markdown("**📰 Sources de vérification (Google Actualités) :**")
+        st.markdown("**📰 Sources de vérification (fact-check) :**")
         for i, ns in enumerate(news_sources_fc, 1):
             date_tag = f" — {ns.get('date', '')}" if ns.get('date') else ""
-            st.markdown(f"{i}. **{ns['title'][:60]}**{date_tag}  \n`{ns['url']}`")
+            type_icon = "🔍" if ns.get('source_type') == 'serp' else "📰"
+            st.markdown(f"{i}. {type_icon} **{ns['title'][:60]}**{date_tag}  \n`{ns['url']}`")
     
     # Copier le contenu
     with st.expander("📋 Copier le contenu"):
