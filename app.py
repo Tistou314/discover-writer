@@ -371,6 +371,77 @@ def search_serper(query: str, api_key: str, num_results: int = 10) -> List[Dict]
     return results
 
 
+def search_serper_news(query: str, api_key: str, num_results: int = 5) -> List[Dict]:
+    """Recherche via Serper.dev endpoint News (Google Actualités)"""
+    url = "https://google.serper.dev/news"
+    headers = {
+        "X-API-KEY": api_key,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "q": query,
+        "gl": "fr",
+        "hl": "fr",
+        "num": num_results
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        results = []
+        for item in data.get("news", [])[:num_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("link", ""),
+                "snippet": item.get("snippet", ""),
+                "date": item.get("date", "")
+            })
+        
+        return results
+    except Exception as e:
+        return []
+
+
+def fetch_news_for_fact_check(keyword: str, api_key: str) -> Tuple[List[Dict], List[str]]:
+    """
+    Lance 2-3 recherches Google Actualités ciblées sur le sujet,
+    scrappe les meilleurs résultats et retourne (sources_news, contenus_news).
+    """
+    # Générer des requêtes complémentaires ciblées sur les changements récents
+    queries = [
+        f"{keyword} 2026",
+        f"{keyword} 2026 changements nouveautés",
+        f"{keyword} ce qui change 2026",
+    ]
+    
+    # Collecter les URLs uniques depuis Google Actu
+    all_news = []
+    seen_urls = set()
+    
+    for q in queries:
+        results = search_serper_news(q, api_key, num_results=4)
+        for r in results:
+            if r['url'] not in seen_urls:
+                seen_urls.add(r['url'])
+                all_news.append(r)
+    
+    # Limiter à 4 articles max pour ne pas exploser les tokens
+    all_news = all_news[:4]
+    
+    # Scrapper le contenu
+    news_contents = []
+    for news in all_news:
+        try:
+            content = fetch_content_jina(news['url'])
+            news_contents.append(content)
+        except Exception:
+            news_contents.append("Contenu non disponible")
+    
+    return all_news, news_contents
+
+
 def fetch_content_jina(url: str) -> str:
     """Récupère le contenu d'une page via Jina Reader (gratuit)"""
     jina_url = f"https://r.jina.ai/{url}"
@@ -604,45 +675,51 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
 def fact_check_and_correct(
     client: anthropic.Anthropic,
     article: str,
-    sources: List[Dict],
-    contents: List[str],
+    fc_sources: List[Dict],
+    fc_contents: List[str],
     keyword: str,
     custom_instructions: str = ""
 ) -> Tuple[str, str]:
     """
-    Vérifie les faits ET produit une version corrigée de l'article.
+    Vérifie les faits de l'article contre des sources Google Actualités indépendantes.
     Retourne (rapport_fact_check, article_corrigé).
     """
     
     sources_context = ""
-    for i, (source, content) in enumerate(zip(sources, contents), 1):
+    for i, (source, content) in enumerate(zip(fc_sources, fc_contents), 1):
+        date_info = f" ({source.get('date', '')})" if source.get('date') else ""
         sources_context += f"""
---- SOURCE {i} : {source['title']} ---
+--- SOURCE {i} : {source['title']}{date_info} ---
 URL: {source['url']}
 Contenu:
 {content[:8000]}
 
 """
     
-    system_prompt = """Tu es un fact-checker et correcteur éditorial rigoureux. Tu as deux missions :
+    system_prompt = """Tu es un fact-checker et correcteur éditorial rigoureux. Tu travailles avec des sources issues de Google Actualités, indépendantes de celles utilisées pour rédiger l'article. C'est ce qui te permet d'avoir un regard neuf.
 
-MISSION 1 — VÉRIFICATION : analyser chaque affirmation factuelle de l'article et la croiser avec les sources originales.
+Tu as TROIS missions :
 
-MISSION 2 — CORRECTION : produire une version corrigée de l'article où toutes les erreurs détectées sont corrigées, les informations non sourcées sont soit retirées soit reformulées avec prudence, et les chiffres inexacts sont rectifiés.
+MISSION 1 — VÉRIFICATION DES AFFIRMATIONS : analyser chaque affirmation factuelle de l'article (chiffres, dates, noms, statistiques, conditions, règles) et la croiser avec les sources d'actualité fournies.
+
+MISSION 2 — CONTRÔLE DE COMPLÉTUDE : c'est ta mission la plus critique. Compare l'article aux sources d'actualité pour détecter les INFORMATIONS IMPORTANTES MANQUANTES. Un article factuellement juste mais qui omet une évolution majeure du sujet est trompeur pour le lecteur. Exemples d'omissions graves : un dispositif/produit/travaux qui a été supprimé ou ajouté récemment, un changement de conditions ou de règles, un événement récent qui change la donne, une exclusion nouvelle.
+
+MISSION 3 — CORRECTION : produire une version corrigée de l'article qui :
+- Corrige les erreurs factuelles détectées
+- INTÈGRE les informations manquantes importantes (en les insérant naturellement dans les sections existantes, pas en ajoutant un bloc fourre-tout)
+- Reformule les affirmations douteuses avec prudence
 
 PRINCIPES :
-- EXHAUSTIF : vérifie TOUTES les affirmations factuelles (chiffres, dates, noms, statistiques, attributions)
-- PRÉCIS : cite l'affirmation vérifiée et la source qui la confirme ou l'infirme
-- HONNÊTE : si une info n'apparaît dans aucune source, signale-le
-- CONSERVATEUR dans les corrections : ne change que ce qui est factuellement problématique. Le style, le ton, la structure et les formulations d'opinion restent intacts.
-- Si un passage contient une erreur factuelle, corrige UNIQUEMENT le fait erroné, ne réécris pas tout le paragraphe."""
+- EXHAUSTIF sur les faits ET les omissions
+- CONSERVATEUR sur le style : ne touche qu'au fond factuel, jamais au ton ni à la structure
+- Pour les ajouts de complétude, insère-les dans la section la plus pertinente, dans le même style que l'auteur"""
 
-    user_prompt = f"""Voici un article sur "{keyword}". Vérifie les faits puis produis la version corrigée.
+    user_prompt = f"""Voici un article sur "{keyword}". Vérifie-le contre les sources d'actualité ci-dessous, contrôle sa complétude, puis produis la version corrigée.
 
 ## ARTICLE À VÉRIFIER :
 {article}
 
-## SOURCES ORIGINALES :
+## SOURCES DE VÉRIFICATION (Google Actualités) :
 {sources_context}
 
 {f"Note : le style de l'article suit un persona éditorial spécifique. Respecte-le dans la version corrigée : {custom_instructions}" if custom_instructions else ""}
@@ -652,7 +729,7 @@ PRINCIPES :
 ===RAPPORT===
 
 ### SCORE GLOBAL
-[X/10] — [une phrase résumant la fiabilité globale]
+[X/10] — [une phrase résumant la fiabilité ET la complétude. Un article juste mais très incomplet ne peut pas dépasser 6/10]
 
 ### AFFIRMATIONS VÉRIFIÉES
 Pour chaque affirmation factuelle :
@@ -661,29 +738,35 @@ Pour chaque affirmation factuelle :
 → Source [N] : [explication courte]
 
 ⚠️ **NON SOURCÉ** — "[affirmation]"
-→ [plausible / douteuse / invérifiable]. Action prise : [conservé tel quel / reformulé avec prudence / retiré]
+→ [plausible / douteuse / invérifiable]. Action : [conservé / reformulé / retiré]
 
 ❌ **INEXACT** — "[affirmation]"
-→ Les sources indiquent : [fait réel avec référence]
-→ Correction appliquée : [description de la correction]
+→ Les sources indiquent : [fait réel + référence]
+→ Correction appliquée : [description]
+
+### OMISSIONS DÉTECTÉES
+Pour chaque information importante dans les sources MAIS ABSENTE de l'article :
+
+🔴 **OMISSION MAJEURE** — "[info manquante]"
+→ Source [N] — [pourquoi c'est important pour le lecteur]
+→ Action : [où et comment l'info a été intégrée dans l'article corrigé]
+
+🟡 **OMISSION MINEURE** — "[info manquante]"
+→ Source [N] — [explication]
+→ Action : [ajouté / ignoré car secondaire]
+
+Si aucune omission détectée : "Aucune omission significative détectée."
 
 ### CHIFFRES ET DONNÉES
 | Donnée dans l'article | Statut | Source | Action |
 |---|---|---|---|
 
 ### RÉSUMÉ DES CORRECTIONS
-[Liste numérotée des modifications apportées à l'article. Si aucune correction nécessaire, indique "Aucune correction nécessaire."]
+[Liste numérotée de TOUTES les modifications : corrections + ajouts de complétude]
 
 ===ARTICLE_CORRIGÉ===
 
-[L'article complet avec les corrections appliquées. Même formatage Markdown que l'original. Si aucune correction n'est nécessaire, reproduis l'article tel quel.]
-
-RAPPELS :
-- Ne touche PAS au style, au ton, au registre, à la structure
-- Ne corrige QUE les faits erronés, non sourcés ou trompeurs
-- Si un chiffre est faux, remplace-le par le bon ou par une formulation prudente
-- Si une affirmation est invérifiable et non sourcée, reformule-la avec un conditionnel ou retire-la
-- Conserve les H2, le gras, le formatage Markdown identique à l'original"""
+[L'article complet corrigé et complété. Même formatage Markdown. Si rien à corriger, reproduis l'article tel quel.]"""
 
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
@@ -735,20 +818,32 @@ def parse_fact_check_score(fc_result: str) -> Tuple[int, str, str]:
     confirmed = len(re.findall(r'✅', fc_result))
     unsourced = len(re.findall(r'⚠️', fc_result))
     incorrect = len(re.findall(r'❌', fc_result))
+    major_omissions = len(re.findall(r'🔴', fc_result))
+    minor_omissions = len(re.findall(r'🟡', fc_result))
     
-    score_line = f"{confirmed} confirmé{'s' if confirmed > 1 else ''} · {unsourced} non sourcé{'s' if unsourced > 1 else ''} · {incorrect} inexact{'s' if incorrect > 1 else ''}"
+    parts = [
+        f"{confirmed} confirmé{'s' if confirmed > 1 else ''}",
+        f"{unsourced} non sourcé{'s' if unsourced > 1 else ''}",
+        f"{incorrect} inexact{'s' if incorrect > 1 else ''}",
+    ]
+    if major_omissions > 0:
+        parts.append(f"{major_omissions} omission{'s' if major_omissions > 1 else ''} majeure{'s' if major_omissions > 1 else ''}")
+    if minor_omissions > 0:
+        parts.append(f"{minor_omissions} omission{'s' if minor_omissions > 1 else ''} mineure{'s' if minor_omissions > 1 else ''}")
+    
+    score_line = " · ".join(parts)
     
     return score, score_class, score_line
 
 
 def count_corrections(fc_report: str) -> int:
-    """Compte le nombre de corrections appliquées"""
-    # Compter les ❌ (corrections d'erreurs) + ⚠️ avec action != "conservé"
+    """Compte le nombre de corrections et omissions détectées"""
     errors = len(re.findall(r'❌', fc_report))
-    # Compter les ⚠️ qui ont mené à une action (reformulé ou retiré)
     reformulated = len(re.findall(r'reformulé', fc_report, re.IGNORECASE))
     removed = len(re.findall(r'retiré', fc_report, re.IGNORECASE))
-    return errors + reformulated + removed
+    # Compter les omissions majeures ajoutées
+    major_omissions = len(re.findall(r'🔴', fc_report))
+    return errors + reformulated + removed + major_omissions
 
 
 # ============================================
@@ -997,29 +1092,58 @@ if generate_button:
     # === FACT-CHECK + CORRECTION ===
     fc_report = None
     corrected_article = None
+    news_sources_fc = None
+    news_contents_fc = None
     if enable_fact_check:
-        progress_container.empty()
-        with progress_container:
-            st.markdown("""
-            <div class="step-indicator">
-                <div class="step-dot"></div>
-                <span class="step-text">Vérification factuelle et correction...</span>
-            </div>
-            """, unsafe_allow_html=True)
-            try:
-                # Extraire uniquement l'article (sans métadonnées)
-                if "---" in article:
-                    parts = article.split("---")
-                    article_only = "---".join(parts[1:]).strip().replace("```", "").strip()
-                else:
-                    article_only = article
-                
-                fc_report, corrected_article = fact_check_and_correct(
-                    client, article_only, sources, contents, keyword, custom_instructions
-                )
-            except Exception as e:
-                fc_report = f"⚠️ Erreur lors du fact-checking : {str(e)}"
+        # Étape 3a : Recherche Google Actualités pour le fact-check
+        if st.session_state.get('serper_key'):
+            progress_container.empty()
+            with progress_container:
+                st.markdown("""
+                <div class="step-indicator">
+                    <div class="step-dot"></div>
+                    <span class="step-text">Recherche Google Actualités pour vérification...</span>
+                </div>
+                """, unsafe_allow_html=True)
+                try:
+                    news_sources_fc, news_contents_fc = fetch_news_for_fact_check(
+                        keyword, st.session_state['serper_key']
+                    )
+                except Exception as e:
+                    news_sources_fc = []
+                    news_contents_fc = []
+            
+            # Étape 3b : Fact-check avec sources actu uniquement
+            if news_sources_fc and len(news_sources_fc) > 0:
+                progress_container.empty()
+                with progress_container:
+                    st.markdown(f"""
+                    <div class="step-indicator">
+                        <div class="step-dot"></div>
+                        <span class="step-text">Vérification factuelle contre {len(news_sources_fc)} sources d'actualité...</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    try:
+                        if "---" in article:
+                            parts = article.split("---")
+                            article_only = "---".join(parts[1:]).strip().replace("```", "").strip()
+                        else:
+                            article_only = article
+                        
+                        fc_report, corrected_article = fact_check_and_correct(
+                            client, article_only, 
+                            news_sources_fc, news_contents_fc,
+                            keyword, custom_instructions
+                        )
+                    except Exception as e:
+                        fc_report = f"⚠️ Erreur lors du fact-checking : {str(e)}"
+                        corrected_article = None
+            else:
+                fc_report = "⚠️ Aucune source d'actualité trouvée pour le fact-checking. Vérification manuelle recommandée."
                 corrected_article = None
+        else:
+            fc_report = "⚠️ Clé API Serper requise pour le fact-checking via Google Actualités."
+            corrected_article = None
     
     # === AFFICHAGE ===
     progress_container.empty()
@@ -1169,11 +1293,17 @@ if generate_button:
     
     # Sources utilisées
     st.markdown("---")
-    st.markdown("**Sources analysées :**")
-    sources_html = ""
-    for source in sources:
-        sources_html += f'<span class="source-pill">{source["title"][:40]}...</span>'
-    st.markdown(f'<div style="margin-top: 0.5rem;">{sources_html}</div>', unsafe_allow_html=True)
+    st.markdown("**📚 Sources de rédaction :**")
+    for i, source in enumerate(sources, 1):
+        st.markdown(f"{i}. **{source['title'][:60]}**  \n`{source['url']}`")
+    
+    # Sources actu utilisées pour le fact-check
+    if news_sources_fc and len(news_sources_fc) > 0:
+        st.markdown("")
+        st.markdown("**📰 Sources de vérification (Google Actualités) :**")
+        for i, ns in enumerate(news_sources_fc, 1):
+            date_tag = f" — {ns.get('date', '')}" if ns.get('date') else ""
+            st.markdown(f"{i}. **{ns['title'][:60]}**{date_tag}  \n`{ns['url']}`")
     
     # Copier le contenu
     with st.expander("📋 Copier le contenu"):
