@@ -243,6 +243,11 @@ if generate_button:
         else:
             st.info("Non détectée")
 
+    # Prompt image
+    if meta.get("image_prompt"):
+        st.markdown("**🖼️ Prompt image à la une (Nano Banana, 16:9) :**")
+        st.code(meta["image_prompt"], language=None)
+
     st.markdown("---")
 
     # Article
