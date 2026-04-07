@@ -232,10 +232,16 @@ if generate_button:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Title SEO :**")
-        st.code(meta["title_seo"], language=None) if meta["title_seo"] else st.info("Non détecté")
+        if meta["title_seo"]:
+            st.code(meta["title_seo"], language=None)
+        else:
+            st.info("Non détecté")
     with col2:
         st.markdown("**Meta Description :**")
-        st.code(meta["meta_desc"], language=None) if meta["meta_desc"] else st.info("Non détectée")
+        if meta["meta_desc"]:
+            st.code(meta["meta_desc"], language=None)
+        else:
+            st.info("Non détectée")
 
     st.markdown("---")
 
@@ -285,7 +291,11 @@ if generate_button:
             tab1, tab2, tab3 = st.tabs(["Article seul", "Tout (méta + article)", "Rapport fact-check"])
             with tab1: st.code(article_content, language="markdown")
             with tab2: st.code(article, language="markdown")
-            with tab3: st.code(fc_report, language="markdown") if fc_report else st.info("Fact-checking non activé")
+            with tab3:
+                if fc_report:
+                    st.code(fc_report, language="markdown")
+                else:
+                    st.info("Fact-checking non activé")
 
 # Footer
 st.markdown('<div style="text-align: center; margin-top: 3rem; color: #94a3b8; font-size: 0.85rem;">Propulsé par Claude API & Serper</div>', unsafe_allow_html=True)
