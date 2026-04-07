@@ -829,7 +829,9 @@ Si aucune omission détectée : "Aucune omission significative détectée."
 
 ===ARTICLE_CORRIGÉ===
 
-[L'article complet corrigé et complété. Même formatage Markdown. Si rien à corriger, reproduis l'article tel quel.]"""
+[L'article complet corrigé et complété. Même formatage Markdown. Si rien à corriger, reproduis l'article tel quel.]
+
+CONTRAINTE DE LONGUEUR : l'article corrigé doit rester dans la même fourchette de longueur que l'article original (+/- 15%). Si tu ajoutes du contenu pour combler une omission, compense en resserrant d'autres passages (supprime les redondances, raccourcis les développements moins essentiels). Ne laisse jamais l'article gonfler de 30-50% après correction."""
 
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
