@@ -2,8 +2,9 @@ import streamlit as st
 import requests
 import json
 import anthropic
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import time
+import re
 
 # Charger les secrets si disponibles
 if hasattr(st, 'secrets') and 'ANTHROPIC_API_KEY' in st.secrets:
@@ -233,6 +234,36 @@ st.markdown("""
         font-weight: 600;
     }
     
+    /* Fact-check styles */
+    .fc-summary {
+        background: white;
+        border-radius: 16px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        margin: 1rem 0;
+    }
+    
+    .fc-score {
+        font-size: 2rem;
+        font-weight: 700;
+        text-align: center;
+    }
+    
+    .fc-score-good { color: #10b981; }
+    .fc-score-medium { color: #f59e0b; }
+    .fc-score-bad { color: #ef4444; }
+    
+    .fc-corrections-banner {
+        background: linear-gradient(135deg, #10b98115, #05966915);
+        border: 1px solid #10b98140;
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        margin: 0.75rem 0;
+        font-size: 0.9rem;
+        color: #065f46;
+    }
+    
     /* Settings card */
     .settings-toggle {
         text-align: center;
@@ -350,7 +381,6 @@ def fetch_content_jina(url: str) -> str:
     try:
         response = requests.get(jina_url, headers=headers, timeout=30)
         response.raise_for_status()
-        # Limiter la taille du contenu
         content = response.text[:15000]
         return content
     except Exception as e:
@@ -359,14 +389,16 @@ def fetch_content_jina(url: str) -> str:
 
 def extract_title_from_url(url: str) -> str:
     """Extrait un titre simple depuis l'URL"""
-    # Enlever le protocole et www
     title = url.replace("https://", "").replace("http://", "").replace("www.", "")
-    # Prendre le domaine + début du path
     parts = title.split("/")
     if len(parts) > 1 and parts[1]:
         return f"{parts[0]} - {parts[1][:30]}"
     return parts[0]
 
+
+# ============================================
+# GÉNÉRATION DE L'ARTICLE
+# ============================================
 
 def generate_article(
     client: anthropic.Anthropic,
@@ -390,86 +422,104 @@ Contenu:
 
 """
     
-    system_prompt = f"""Tu es un rédacteur web senior avec 15 ans d'expérience. Tu écris comme un humain, pas comme une IA. Tes textes sont fluides, chaleureux et agréables à lire.
+    # Construire le bloc persona. S'il est renseigné, il PILOTE tout le style.
+    # S'il est vide, on applique un style par défaut développé.
+    if custom_instructions and custom_instructions.strip():
+        persona_block = f"""## RÈGLE N°1 — PERSONA ET DIRECTIVES ÉDITORIALES (PRIORITÉ ABSOLUE)
 
-## RÈGLE N°1 : PERSONA ET CONSIGNES DE L'UTILISATEUR
+Les consignes ci-dessous ont été rédigées par l'équipe éditoriale. Elles PRIMENT SUR TOUT le reste de ce prompt — ton, style, niveau de langue, tutoiement/vouvoiement, longueur des phrases, registre, humour, technicité, persona, format, tout.
 
-Si l'utilisateur fournit des instructions de style, un persona, une charte éditoriale ou un ton spécifique, c'est ta PRIORITÉ ABSOLUE. Tu adoptes ce ton et ce style à 100%, il prime sur toutes les autres consignes ci-dessous.
+Si une consigne éditoriale contredit une règle ci-dessous (par ex. le persona demande du tutoiement alors que la règle par défaut dit vouvoiement, ou le persona demande un style concis alors que le défaut est développé), c'est LE PERSONA QUI GAGNE. Toujours.
 
-## RÈGLE N°2 : VARIANCE STRUCTURELLE
+### CONSIGNES ÉDITORIALES :
+{custom_instructions}
 
-Un humain n'écrit jamais des sections de longueur identique. Tu dois :
+### CE QUE ÇA IMPLIQUE :
+- Adopte le ton, le style et le persona décrits ci-dessus dès la première phrase et maintiens-le jusqu'à la dernière
+- Si le persona définit un niveau de développement (concis, détaillé, conversationnel...), applique-le — il remplace les consignes de développement par défaut
+- Si le persona définit un registre (familier, expert, humoristique...), chaque phrase doit sonner dans ce registre
+- Si le persona utilise le tutoiement, tutoie. S'il vouvoie, vouvoie. S'il ne précise pas, vouvoie par défaut.
+- En cas de doute, relis les consignes éditoriales et demande-toi : "est-ce que ma phrase sonne comme ce persona l'écrirait ?" Si non, reformule."""
+    else:
+        persona_block = """## STYLE PAR DÉFAUT (aucun persona renseigné)
 
+En l'absence de consignes éditoriales spécifiques, applique ce style par défaut :
+- Ton expert mais chaleureux et accessible, jamais scolaire ni robotique
+- Vouvoiement naturel
+- Style développé : chaque idée est expliquée, illustrée et contextualisée (paragraphes de 3-6 phrases)
+- Le lecteur doit sentir qu'un humain passionné lui parle"""
+
+    system_prompt = f"""Tu es un rédacteur web polyvalent qui s'adapte parfaitement au brief éditorial qu'on lui donne. Tu écris comme un humain, pas comme une IA.
+
+{persona_block}
+
+## RÈGLES STRUCTURELLES (s'appliquent toujours, sauf si le persona les contredit explicitement)
+
+### Variance structurelle
 - Varier la longueur des sections : certaines font 2-3 phrases, d'autres 8-10
-- Varier la longueur des paragraphes : alterne entre paragraphes courts et plus développés
-- Ne commence jamais deux H2 consécutifs de la même façon (question, affirmation, chiffre, anecdote...)
+- Ne commence jamais deux H2 consécutifs de la même façon
 - Varie le formatage entre sections : prose seule, puis une liste, puis un tableau si pertinent
+- INTERDIT : que deux sections consécutives aient la même structure interne
 
-INTERDIT : que deux sections consécutives aient la même structure interne.
+### Fluidité et transitions
+- Chaque paragraphe s'enchaîne logiquement avec le précédent
+- Transitions variées et naturelles, jamais mécaniques
+- Les fins de section donnent envie de lire la suite
 
-## FLUIDITÉ ET TRANSITIONS
+### Développement des idées (SI le persona ne précise pas le niveau)
+Pour chaque idée introduite :
+1. Énonce le fait clairement
+2. Développe le pourquoi/comment (1-2 phrases minimum)
+3. Illustre avec un exemple, chiffre contextualisé ou comparaison
+4. Relie à l'idée suivante
 
-C'est essentiel. Ton texte doit COULER naturellement d'une idée à l'autre :
-
-- Chaque paragraphe doit s'enchaîner logiquement avec le précédent. Le lecteur ne doit jamais sentir de rupture brutale.
-- Utilise des transitions variées et naturelles : reformulations-ponts ("Ce qui explique pourquoi...", "Et c'est précisément là que..."), rebonds sur l'idée précédente, questions qui amènent la suite.
-- Alterne entre transitions explicites et enchaînements implicites (parfois le lien logique suffit, pas besoin de connecteur).
-- Évite les connecteurs mécaniques répétitifs. Varie : "D'autant que", "Résultat", "Le hic", "Autre point notable", "Ce qui change la donne", "Côté pratique", "Et pour cause"...
-- Les fins de section doivent donner envie de lire la suite, pas tomber à plat.
+Style "sec" INTERDIT sauf demande explicite du persona :
+❌ "L'IA transforme le recrutement. Les entreprises l'utilisent pour trier les CV. Cela fait gagner du temps."
+✅ "L'intelligence artificielle redessine les contours du recrutement, et pas seulement à la marge. Là où un recruteur passait en moyenne 30 secondes par CV, les algorithmes analysent désormais des centaines de candidatures en quelques minutes, en croisant des critères bien plus fins que les simples mots-clés."
 
 ## ACCROCHE
-
-- Ancrage contextuel dès la première phrase (actualité, tendance, chiffre marquant, saison...)
+- Ancrage contextuel dès la première phrase (actualité, tendance, chiffre, saison...)
 - Le lecteur doit comprendre pourquoi lire ça MAINTENANT
-- Pas d'intro bateau de type "Le [sujet] est devenu incontournable ces dernières années"
-
-## RYTHME ET STYLE
-
-- Écris avec un style incarné et engageant, comme un expert passionné qui s'adresse à son lecteur
-- Mélange phrases courtes et phrases plus développées pour créer du rythme, mais ne sacrifie jamais la fluidité pour la brièveté
-- Le texte doit se lire à voix haute sans accrocher. Si une phrase sonne mécanique ou hachée, reformule-la.
-- Ajoute de la couleur : comparaisons, métaphores légères, touches d'humour quand le sujet s'y prête
-- Questions rhétoriques avec parcimonie (1-2 max dans tout l'article)
+- Pas d'intro bateau type "Le [sujet] est devenu incontournable"
 
 ## FORMATAGE
-
 - **Gras** sur les mots-clés stratégiques uniquement (pas les phrases entières)
-- Listes à puces UNIQUEMENT pour les énumérations concrètes, et PAS dans chaque section
+- Listes à puces UNIQUEMENT pour les énumérations concrètes
 - Tableau Markdown UNIQUEMENT si données chiffrées comparables
 - En cas de doute entre liste et prose → prose
 
 ## ENRICHISSEMENT SÉMANTIQUE
+- Intègre naturellement les entités liées au sujet
+- Données chiffrées quand disponibles dans les sources
+- Expertise qui va au-delà des mots-clés évidents
 
-- Intègre naturellement les entités liées au sujet (personnes, lieux, marques, concepts techniques)
-- Données chiffrées quand disponibles
-- Montre une expertise qui va au-delà des mots-clés évidents
+## RIGUEUR FACTUELLE — RÈGLE CRITIQUE
 
-## TON
+Tu rédiges un article journalistique, pas un texte créatif. La précision factuelle est NON NÉGOCIABLE :
 
-- Expert mais chaleureux et accessible, jamais scolaire ni robotique
-- Vouvoiement naturel
-- Le lecteur doit sentir qu'un humain passionné lui parle, pas qu'une machine débite des infos
-- Conclusion mémorable (jamais "En conclusion...", "Pour résumer...", "En définitive...")
+- **Ne cite que des chiffres, dates, noms et faits présents dans les sources fournies.** Si une info n'est pas dans les sources, ne l'invente pas.
+- **Si tu n'as pas de chiffre précis, ne fabrique pas de pourcentage ou de statistique.** Utilise des formulations qualitatives : "une part significative", "un nombre croissant", "selon plusieurs acteurs du secteur".
+- **Distingue les faits des interprétations.** Les faits viennent des sources. Tes mises en perspective doivent être formulées comme telles ("ce qui suggère que...", "on peut y voir...").
+- **En cas de doute sur un fait, formulation prudente** plutôt qu'affirmation.
+- **Chaque donnée chiffrée doit être contextualisée** : d'où elle vient, à quelle période elle se rapporte.
 
 ## LONGUEUR
 
-L'article doit faire environ {article_length} mots. C'est une cible, pas un minimum à atteindre coûte que coûte. Si le sujet est couvert en moins, arrête-toi. Ne remplis JAMAIS pour atteindre une longueur.
+L'article doit faire environ {article_length} mots. C'est une cible, pas un minimum à atteindre coûte que coûte. Ne remplis JAMAIS pour atteindre une longueur.
 
 ## À BANNIR ABSOLUMENT
 
 - Tournures IA : "Il est important de noter", "Dans cet article", "N'hésitez pas", "Il convient de", "Force est de constater", "À l'heure où"
-- Style télégraphique froid : ne hache pas les phrases au point de perdre la fluidité
 - Structures symétriques (3 sections de même taille, 3 paragraphes miroirs)
 - Intros génériques sans accroche
 - Remplissage et reformulations qui n'apportent rien
-- Liens et URLs : jamais de [texte](url), jamais d'URL brute, jamais de "source" cliquable
+- Liens et URLs : jamais de [texte](url), jamais d'URL brute
 - Commencer un paragraphe par "Il est" ou "Il faut"
-- Utiliser "Certes... mais" plus d'une fois dans un article
-- Enchaîner des phrases sans lien logique entre elles
+- "Certes... mais" plus d'une fois par article
+- INVENTER des chiffres, statistiques, noms d'études ou citations absents des sources
 
 ## CONTEXTE TEMPOREL
-
-Nous sommes en 2026. Adapte toutes les références temporelles en conséquence. Ne mentionne jamais 2025 comme étant l'année en cours."""
+Nous sommes en 2026. Ne mentionne jamais 2025 comme étant l'année en cours."""
 
     user_prompt = f"""Analyse ces {len(sources)} sources sur "{keyword}" et rédige un article optimisé Discover.
 
@@ -478,6 +528,7 @@ Nous sommes en 2026. Adapte toutes les références temporelles en conséquence.
 CONSIGNES :
 1. Identifie les infos clés, données chiffrées, angles différenciants
 2. Repère les entités importantes à intégrer (personnes, marques, concepts...)
+3. IMPORTANT : ne retiens QUE les informations factuellement présentes dans les sources.
 
 **MÉTADONNÉES SEO (à fournir EN PREMIER, avant l'article) :**
 
@@ -509,10 +560,9 @@ Propose 1 meta description :
 6. Utilise le gras sur les mots-clés stratégiques
 7. Termine sur une note mémorable
 8. AUCUN LIEN dans l'article (ni [texte](url) ni URL brute)
+9. DÉVELOPPE chaque idée (sauf si le persona demande un style concis)
 
-{f"Instructions supplémentaires : {custom_instructions}" if custom_instructions else ""}
-
-CONTRAINTE DE LONGUEUR : L'article (hors métadonnées) doit faire environ {article_length} mots. Vise cette cible précisément. Si tu es au-dessus, coupe. Si tu es en dessous sans remplissage possible, c'est OK.
+CONTRAINTE DE LONGUEUR : L'article (hors métadonnées) doit faire environ {article_length} mots.
 
 FORMAT DE RÉPONSE OBLIGATOIRE :
 ```
@@ -536,8 +586,8 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
 
     response = client.messages.create(
         model="claude-sonnet-4-5-20250929",
-        max_tokens=5000,
-        temperature=0.7,
+        max_tokens=6000,
+        temperature=0.8,
         messages=[
             {"role": "user", "content": user_prompt}
         ],
@@ -545,6 +595,160 @@ FORMAT DE RÉPONSE OBLIGATOIRE :
     )
     
     return response.content[0].text
+
+
+# ============================================
+# FACT-CHECK + CORRECTION AUTOMATIQUE
+# ============================================
+
+def fact_check_and_correct(
+    client: anthropic.Anthropic,
+    article: str,
+    sources: List[Dict],
+    contents: List[str],
+    keyword: str,
+    custom_instructions: str = ""
+) -> Tuple[str, str]:
+    """
+    Vérifie les faits ET produit une version corrigée de l'article.
+    Retourne (rapport_fact_check, article_corrigé).
+    """
+    
+    sources_context = ""
+    for i, (source, content) in enumerate(zip(sources, contents), 1):
+        sources_context += f"""
+--- SOURCE {i} : {source['title']} ---
+URL: {source['url']}
+Contenu:
+{content[:8000]}
+
+"""
+    
+    system_prompt = """Tu es un fact-checker et correcteur éditorial rigoureux. Tu as deux missions :
+
+MISSION 1 — VÉRIFICATION : analyser chaque affirmation factuelle de l'article et la croiser avec les sources originales.
+
+MISSION 2 — CORRECTION : produire une version corrigée de l'article où toutes les erreurs détectées sont corrigées, les informations non sourcées sont soit retirées soit reformulées avec prudence, et les chiffres inexacts sont rectifiés.
+
+PRINCIPES :
+- EXHAUSTIF : vérifie TOUTES les affirmations factuelles (chiffres, dates, noms, statistiques, attributions)
+- PRÉCIS : cite l'affirmation vérifiée et la source qui la confirme ou l'infirme
+- HONNÊTE : si une info n'apparaît dans aucune source, signale-le
+- CONSERVATEUR dans les corrections : ne change que ce qui est factuellement problématique. Le style, le ton, la structure et les formulations d'opinion restent intacts.
+- Si un passage contient une erreur factuelle, corrige UNIQUEMENT le fait erroné, ne réécris pas tout le paragraphe."""
+
+    user_prompt = f"""Voici un article sur "{keyword}". Vérifie les faits puis produis la version corrigée.
+
+## ARTICLE À VÉRIFIER :
+{article}
+
+## SOURCES ORIGINALES :
+{sources_context}
+
+{f"Note : le style de l'article suit un persona éditorial spécifique. Respecte-le dans la version corrigée : {custom_instructions}" if custom_instructions else ""}
+
+## FORMAT DE RÉPONSE — DEUX BLOCS OBLIGATOIRES :
+
+===RAPPORT===
+
+### SCORE GLOBAL
+[X/10] — [une phrase résumant la fiabilité globale]
+
+### AFFIRMATIONS VÉRIFIÉES
+Pour chaque affirmation factuelle :
+
+✅ **CONFIRMÉ** — "[affirmation]"
+→ Source [N] : [explication courte]
+
+⚠️ **NON SOURCÉ** — "[affirmation]"
+→ [plausible / douteuse / invérifiable]. Action prise : [conservé tel quel / reformulé avec prudence / retiré]
+
+❌ **INEXACT** — "[affirmation]"
+→ Les sources indiquent : [fait réel avec référence]
+→ Correction appliquée : [description de la correction]
+
+### CHIFFRES ET DONNÉES
+| Donnée dans l'article | Statut | Source | Action |
+|---|---|---|---|
+
+### RÉSUMÉ DES CORRECTIONS
+[Liste numérotée des modifications apportées à l'article. Si aucune correction nécessaire, indique "Aucune correction nécessaire."]
+
+===ARTICLE_CORRIGÉ===
+
+[L'article complet avec les corrections appliquées. Même formatage Markdown que l'original. Si aucune correction n'est nécessaire, reproduis l'article tel quel.]
+
+RAPPELS :
+- Ne touche PAS au style, au ton, au registre, à la structure
+- Ne corrige QUE les faits erronés, non sourcés ou trompeurs
+- Si un chiffre est faux, remplace-le par le bon ou par une formulation prudente
+- Si une affirmation est invérifiable et non sourcée, reformule-la avec un conditionnel ou retire-la
+- Conserve les H2, le gras, le formatage Markdown identique à l'original"""
+
+    response = client.messages.create(
+        model="claude-sonnet-4-5-20250929",
+        max_tokens=8000,
+        temperature=0.15,
+        messages=[
+            {"role": "user", "content": user_prompt}
+        ],
+        system=system_prompt
+    )
+    
+    result = response.content[0].text
+    
+    # Séparer le rapport et l'article corrigé
+    report = ""
+    corrected_article = ""
+    
+    if "===ARTICLE_CORRIGÉ===" in result:
+        parts = result.split("===ARTICLE_CORRIGÉ===")
+        report = parts[0].replace("===RAPPORT===", "").strip()
+        corrected_article = parts[1].strip()
+    elif "===ARTICLE_CORRIGE===" in result:
+        parts = result.split("===ARTICLE_CORRIGE===")
+        report = parts[0].replace("===RAPPORT===", "").strip()
+        corrected_article = parts[1].strip()
+    else:
+        # Fallback : essayer de trouver une séparation
+        report = result
+        corrected_article = ""
+    
+    return report, corrected_article
+
+
+def parse_fact_check_score(fc_result: str) -> Tuple[int, str, str]:
+    """Parse le score et les compteurs du fact-check"""
+    score = -1
+    score_class = "fc-score-medium"
+    
+    score_match = re.search(r'(\d+)\s*/\s*10', fc_result)
+    if score_match:
+        score = int(score_match.group(1))
+        if score >= 8:
+            score_class = "fc-score-good"
+        elif score >= 5:
+            score_class = "fc-score-medium"
+        else:
+            score_class = "fc-score-bad"
+    
+    confirmed = len(re.findall(r'✅', fc_result))
+    unsourced = len(re.findall(r'⚠️', fc_result))
+    incorrect = len(re.findall(r'❌', fc_result))
+    
+    score_line = f"{confirmed} confirmé{'s' if confirmed > 1 else ''} · {unsourced} non sourcé{'s' if unsourced > 1 else ''} · {incorrect} inexact{'s' if incorrect > 1 else ''}"
+    
+    return score, score_class, score_line
+
+
+def count_corrections(fc_report: str) -> int:
+    """Compte le nombre de corrections appliquées"""
+    # Compter les ❌ (corrections d'erreurs) + ⚠️ avec action != "conservé"
+    errors = len(re.findall(r'❌', fc_report))
+    # Compter les ⚠️ qui ont mené à une action (reformulé ou retiré)
+    reformulated = len(re.findall(r'reformulé', fc_report, re.IGNORECASE))
+    removed = len(re.findall(r'retiré', fc_report, re.IGNORECASE))
+    return errors + reformulated + removed
 
 
 # ============================================
@@ -595,13 +799,12 @@ mode = st.radio(
     help="Recherche auto : trouve les meilleures sources via Google. URLs manuelles : choisis tes propres sources."
 )
 
-# Variables pour stocker les inputs selon le mode
+# Variables
 keyword = ""
 manual_urls = []
 num_sources = 5
 
 if mode == "🔍 Recherche automatique":
-    # Mode recherche : input topic + slider nombre de sources
     st.markdown("""
     <div style="background: linear-gradient(135deg, #667eea15, #764ba215); border-left: 4px solid #667eea; border-radius: 0 12px 12px 0; padding: 1rem 1.25rem; margin-bottom: 0.5rem;">
         <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">🎯 Thème à traiter</span>
@@ -617,13 +820,11 @@ if mode == "🔍 Recherche automatique":
     with col1:
         num_sources = st.slider("Nombre de sources à analyser", min_value=3, max_value=10, value=5)
     with col2:
-        pass  # Espace pour équilibrer
+        pass
 
 else:
-    # Mode URLs manuelles
     st.markdown("**Colle entre 2 et 5 URLs sources :**")
     
-    # Sujet/angle pour l'article (obligatoire en mode manuel)
     st.markdown("""
     <div style="background: linear-gradient(135deg, #667eea15, #764ba215); border-left: 4px solid #667eea; border-radius: 0 12px 12px 0; padding: 1rem 1.25rem; margin-bottom: 0.5rem;">
         <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">🎯 Thème à traiter</span>
@@ -636,37 +837,49 @@ else:
         label_visibility="collapsed"
     )
     
-    # Champs URLs dynamiques
     url_inputs = []
     for i in range(5):
         url = st.text_input(
             f"URL {i+1}" + (" (obligatoire)" if i < 2 else " (optionnel)"),
             placeholder=f"https://exemple.com/article-{i+1}",
             key=f"url_{i}",
-            label_visibility="visible" if i < 2 else "visible"
+            label_visibility="visible"
         )
         if url.strip():
             url_inputs.append(url.strip())
     
     manual_urls = url_inputs
 
-# Longueur de l'article - commun aux deux modes
+# Longueur
 article_length = st.slider("📏 Longueur de l'article (en mots)", min_value=300, max_value=2000, value=800, step=100)
 
-# Persona et consignes complémentaires - commun aux deux modes
+# Fact-checking toggle
+enable_fact_check = st.checkbox(
+    "🔍 Activer le fact-checking + correction automatique",
+    value=True,
+    help="Vérifie chaque affirmation contre les sources, puis produit une version corrigée de l'article. Ajoute ~30-45s."
+)
+
+# Persona et consignes — LE champ central pour le style
 st.markdown("""
 <div style="background: linear-gradient(135deg, #f59e0b15, #d9740015); border-left: 4px solid #f59e0b; border-radius: 0 12px 12px 0; padding: 1rem 1.25rem; margin-bottom: 0.5rem;">
-    <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">✍️ Persona et consignes complémentaires</span>
-    <span style="font-size: 0.85rem; color: #64748b; margin-left: 0.5rem;">optionnel</span>
+    <span style="font-size: 1.1rem; font-weight: 600; color: #1e293b;">✍️ Persona & charte éditoriale</span>
+    <span style="font-size: 0.85rem; color: #64748b; margin-left: 0.5rem;">pilote le style de l'article</span>
+</div>
+""", unsafe_allow_html=True)
+st.markdown("""
+<div style="background: #f8fafc; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.75rem; font-size: 0.85rem; color: #64748b;">
+    💡 <strong>C'est ici que tout se joue côté style.</strong> Collez votre persona, charte éditoriale, ton, registre, niveau de détail... Ces consignes priment sur tout le reste. Sans persona, l'outil applique un style développé et expert par défaut.
 </div>
 """, unsafe_allow_html=True)
 custom_instructions = st.text_area(
-    "Persona et consignes complémentaires",
-    placeholder="Ex: Tu es un expert nutrition sportive. Ton décontracté, tutoiement, mentionner les prix...",
-    height=100,
+    "Persona & charte éditoriale",
+    placeholder="""Ex: Tu es Marie, blogueuse food passionnée de 35 ans. Tu tutoies ton lecteur. Ton chaleureux et complice, comme si tu parlais à une copine. Phrases longues et fluides, anecdotes perso, touches d'humour. Tu donnes toujours des astuces pratiques. Niveau de détail : très développé, chaque recette/conseil est expliqué en profondeur avec des variantes.
+
+Autre ex: Expert SEO technique. Vouvoiement. Style concis et dense, pas de fioritures. Chaque phrase apporte une info actionnable. Données chiffrées prioritaires.""",
+    height=180,
     label_visibility="collapsed"
 )
-
 
 # Bouton de génération
 generate_button = st.button("✨ Générer l'article", use_container_width=True)
@@ -676,7 +889,7 @@ generate_button = st.button("✨ Générer l'article", use_container_width=True)
 # ============================================
 
 if generate_button:
-    # Vérifications selon le mode
+    # Vérifications
     if mode == "🔍 Recherche automatique":
         if not st.session_state.get('anthropic_key') or not st.session_state.get('serper_key'):
             st.error("⚠️ Configure d'abord tes clés API dans les paramètres ci-dessus")
@@ -685,7 +898,6 @@ if generate_button:
             st.warning("💡 Entre un mot-clé ou un sujet pour commencer")
             st.stop()
     else:
-        # Mode URLs manuelles
         if not st.session_state.get('anthropic_key'):
             st.error("⚠️ Configure d'abord ta clé API Anthropic dans les paramètres ci-dessus")
             st.stop()
@@ -695,29 +907,23 @@ if generate_button:
         elif len(manual_urls) < 2:
             st.warning("💡 Entre au moins 2 URLs sources")
             st.stop()
-        # Validation basique des URLs
         invalid_urls = [u for u in manual_urls if not (u.startswith("http://") or u.startswith("https://"))]
         if invalid_urls:
-            st.error(f"⚠️ URLs invalides (doivent commencer par http:// ou https://) : {', '.join(invalid_urls)}")
+            st.error(f"⚠️ URLs invalides : {', '.join(invalid_urls)}")
             st.stop()
     
-    # Initialiser le client Anthropic
     client = anthropic.Anthropic(api_key=st.session_state['anthropic_key'])
-    
-    # Container pour les étapes
     progress_container = st.container()
     
+    # === SOURCING ===
     if mode == "🔍 Recherche automatique":
-        # === MODE RECHERCHE AUTOMATIQUE ===
         with progress_container:
-            # Étape 1 : Recherche
             st.markdown("""
             <div class="step-indicator">
                 <div class="step-dot"></div>
                 <span class="step-text">Recherche des meilleures sources...</span>
             </div>
             """, unsafe_allow_html=True)
-            
             try:
                 sources = search_serper(keyword, st.session_state['serper_key'], num_sources)
                 time.sleep(0.3)
@@ -725,7 +931,6 @@ if generate_button:
                 st.error(f"Erreur lors de la recherche : {str(e)}")
                 st.stop()
         
-        # Clear et afficher étape 2
         progress_container.empty()
         with progress_container:
             st.markdown(f"""
@@ -734,9 +939,7 @@ if generate_button:
                 <span class="step-text">Analyse de {len(sources)} sources en cours...</span>
             </div>
             """, unsafe_allow_html=True)
-            
             progress_bar = st.progress(0)
-            
             contents = []
             for i, source in enumerate(sources):
                 try:
@@ -744,15 +947,10 @@ if generate_button:
                     contents.append(content)
                 except Exception as e:
                     contents.append(f"Contenu non disponible: {str(e)}")
-                
                 progress_bar.progress((i + 1) / len(sources))
                 time.sleep(0.1)
-    
     else:
-        # === MODE URLs MANUELLES ===
-        # Construire la liste des sources à partir des URLs
         sources = [{"title": extract_title_from_url(url), "url": url, "snippet": ""} for url in manual_urls]
-        
         with progress_container:
             st.markdown(f"""
             <div class="step-indicator">
@@ -760,17 +958,13 @@ if generate_button:
                 <span class="step-text">Analyse de {len(sources)} sources en cours...</span>
             </div>
             """, unsafe_allow_html=True)
-            
             progress_bar = st.progress(0)
-            
             contents = []
             for i, source in enumerate(sources):
                 try:
                     content = fetch_content_jina(source['url'])
                     contents.append(content)
-                    # Mettre à jour le titre avec celui extrait du contenu si possible
                     if content and not content.startswith("Erreur"):
-                        # Essayer d'extraire le titre du contenu Jina (généralement en première ligne)
                         first_lines = content.split('\n')[:5]
                         for line in first_lines:
                             line = line.strip()
@@ -779,11 +973,10 @@ if generate_button:
                                 break
                 except Exception as e:
                     contents.append(f"Contenu non disponible: {str(e)}")
-                
                 progress_bar.progress((i + 1) / len(sources))
                 time.sleep(0.1)
     
-    # Clear et afficher étape génération (commun aux deux modes)
+    # === RÉDACTION ===
     progress_container.empty()
     with progress_container:
         st.markdown("""
@@ -792,30 +985,50 @@ if generate_button:
             <span class="step-text">Rédaction de l'article...</span>
         </div>
         """, unsafe_allow_html=True)
-        
         try:
             article = generate_article(
-                client,
-                keyword,
-                sources,
-                contents,
-                custom_instructions,
-                article_length
+                client, keyword, sources, contents,
+                custom_instructions, article_length
             )
         except Exception as e:
             st.error(f"Erreur lors de la génération : {str(e)}")
             st.stop()
     
-    # Clear progress et afficher résultat
+    # === FACT-CHECK + CORRECTION ===
+    fc_report = None
+    corrected_article = None
+    if enable_fact_check:
+        progress_container.empty()
+        with progress_container:
+            st.markdown("""
+            <div class="step-indicator">
+                <div class="step-dot"></div>
+                <span class="step-text">Vérification factuelle et correction...</span>
+            </div>
+            """, unsafe_allow_html=True)
+            try:
+                # Extraire uniquement l'article (sans métadonnées)
+                if "---" in article:
+                    parts = article.split("---")
+                    article_only = "---".join(parts[1:]).strip().replace("```", "").strip()
+                else:
+                    article_only = article
+                
+                fc_report, corrected_article = fact_check_and_correct(
+                    client, article_only, sources, contents, keyword, custom_instructions
+                )
+            except Exception as e:
+                fc_report = f"⚠️ Erreur lors du fact-checking : {str(e)}"
+                corrected_article = None
+    
+    # === AFFICHAGE ===
     progress_container.empty()
     
-    # Parser le résultat pour séparer métadonnées et article
+    # Parser les métadonnées
     def parse_result(result):
-        """Sépare les métadonnées SEO de l'article"""
         meta = {"titres": [], "title_seo": "", "meta_desc": ""}
         article_content = result
         
-        # Extraire les titres H1
         if "## TITRES" in result or "## TITRES (H1)" in result:
             try:
                 titres_section = result.split("## TITLE SEO")[0]
@@ -825,7 +1038,6 @@ if generate_button:
             except:
                 pass
         
-        # Extraire le title SEO
         if "## TITLE SEO" in result:
             try:
                 title_section = result.split("## TITLE SEO")[1].split("##")[0]
@@ -833,7 +1045,6 @@ if generate_button:
             except:
                 pass
         
-        # Extraire la meta description
         if "## META DESCRIPTION" in result:
             try:
                 meta_section = result.split("## META DESCRIPTION")[1].split("---")[0]
@@ -841,19 +1052,57 @@ if generate_button:
             except:
                 pass
         
-        # Extraire l'article (après le ---)
         if "---" in result:
             parts = result.split("---")
             if len(parts) > 1:
                 article_content = "---".join(parts[1:]).strip()
-                # Nettoyer les éventuels ``` résiduels
                 article_content = article_content.replace("```", "").strip()
         
         return meta, article_content
     
     meta, article_content = parse_result(article)
     
-    # Affichage des métadonnées SEO
+    # Déterminer quel article afficher en principal
+    has_corrections = False
+    nb_corrections = 0
+    if fc_report and corrected_article:
+        nb_corrections = count_corrections(fc_report)
+        has_corrections = nb_corrections > 0
+    
+    # --- FACT-CHECK SUMMARY ---
+    if fc_report and enable_fact_check:
+        score, score_class, score_line = parse_fact_check_score(fc_report)
+        score_display = f"{score}/10" if score >= 0 else "—"
+        
+        st.markdown(f"""
+        <div class="fc-summary">
+            <div style="display: flex; align-items: center; gap: 1.5rem;">
+                <div class="fc-score {score_class}">{score_display}</div>
+                <div>
+                    <div style="font-weight: 600; color: #1e293b; font-size: 1.1rem;">🔍 Vérification factuelle</div>
+                    <div style="color: #64748b; font-size: 0.9rem; margin-top: 0.25rem;">{score_line}</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        if has_corrections:
+            st.markdown(f"""
+            <div class="fc-corrections-banner">
+                ✅ <strong>{nb_corrections} correction{'s' if nb_corrections > 1 else ''} appliquée{'s' if nb_corrections > 1 else ''}</strong> — L'article corrigé est affiché ci-dessous. L'original est disponible dans "Copier le contenu".
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="fc-corrections-banner">
+                ✅ <strong>Aucune correction nécessaire</strong> — L'article est factuellement fiable au regard des sources.
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with st.expander("📋 Voir le rapport complet de fact-checking", expanded=False):
+            st.markdown(fc_report)
+    
+    # --- MÉTADONNÉES SEO ---
     st.markdown("""
     <div class="result-card">
         <div class="result-header">
@@ -863,13 +1112,11 @@ if generate_button:
     </div>
     """, unsafe_allow_html=True)
     
-    # Titres H1
     if meta["titres"]:
         st.markdown("**Propositions de titres H1 :**")
         for titre in meta["titres"]:
             st.markdown(f"- {titre}")
     
-    # Title SEO et Meta Description côte à côte
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Title SEO :**")
@@ -877,7 +1124,6 @@ if generate_button:
             st.code(meta["title_seo"], language=None)
         else:
             st.info("Non détecté")
-    
     with col2:
         st.markdown("**Meta Description :**")
         if meta["meta_desc"]:
@@ -887,30 +1133,39 @@ if generate_button:
     
     st.markdown("---")
     
-    # Affichage de l'article avec compteur de mots
-    word_count = len(article_content.split())
+    # --- ARTICLE (corrigé si dispo, sinon original) ---
+    display_article = corrected_article if (has_corrections and corrected_article) else article_content
+    display_label = "corrigé" if has_corrections else "original"
     
-    # Couleur du badge selon écart à la cible
+    word_count = len(display_article.split())
+    
     if abs(word_count - article_length) <= article_length * 0.15:
-        count_color = "#10b981"  # vert
+        count_color = "#10b981"
         count_label = "✓"
     elif word_count > article_length:
-        count_color = "#f59e0b"  # orange
+        count_color = "#f59e0b"
         count_label = "⚠ long"
     else:
-        count_color = "#f59e0b"  # orange
+        count_color = "#f59e0b"
         count_label = "⚠ court"
+    
+    version_badge = ""
+    if has_corrections:
+        version_badge = '<span style="background: #10b981; color: white; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 500;">✓ Corrigé</span>'
     
     st.markdown(f"""
     <div class="result-card">
         <div class="result-header">
             <span class="result-title">📄 Article</span>
-            <span style="background: {count_color}; color: white; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">{word_count} mots {count_label}</span>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                {version_badge}
+                <span style="background: {count_color}; color: white; padding: 0.35rem 0.75rem; border-radius: 20px; font-size: 0.85rem; font-weight: 600;">{word_count} mots {count_label}</span>
+            </div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown(article_content)
+    st.markdown(display_article)
     
     # Sources utilisées
     st.markdown("---")
@@ -920,15 +1175,34 @@ if generate_button:
         sources_html += f'<span class="source-pill">{source["title"][:40]}...</span>'
     st.markdown(f'<div style="margin-top: 0.5rem;">{sources_html}</div>', unsafe_allow_html=True)
     
-    # Boutons copier
+    # Copier le contenu
     with st.expander("📋 Copier le contenu"):
-        tab1, tab2 = st.tabs(["Article seul", "Tout (métadonnées + article)"])
-        with tab1:
-            st.code(article_content, language="markdown")
-        with tab2:
-            st.code(article, language="markdown")
+        if has_corrections and corrected_article:
+            tab1, tab2, tab3, tab4 = st.tabs(["Article corrigé", "Article original", "Tout (méta + corrigé)", "Rapport fact-check"])
+            with tab1:
+                st.code(corrected_article, language="markdown")
+            with tab2:
+                st.code(article_content, language="markdown")
+            with tab3:
+                # Recombiner métadonnées + article corrigé
+                meta_part = article.split("---")[0] if "---" in article else ""
+                full_corrected = f"{meta_part}---\n\n{corrected_article}" if meta_part else corrected_article
+                st.code(full_corrected, language="markdown")
+            with tab4:
+                st.code(fc_report if fc_report else "Fact-checking non disponible", language="markdown")
+        else:
+            tab1, tab2, tab3 = st.tabs(["Article seul", "Tout (méta + article)", "Rapport fact-check"])
+            with tab1:
+                st.code(article_content, language="markdown")
+            with tab2:
+                st.code(article, language="markdown")
+            with tab3:
+                if fc_report:
+                    st.code(fc_report, language="markdown")
+                else:
+                    st.info("Fact-checking non activé pour cette génération")
 
-# Footer discret
+# Footer
 st.markdown("""
 <div style="text-align: center; margin-top: 3rem; color: #94a3b8; font-size: 0.85rem;">
     Propulsé par Claude API & Serper • Made with 💜
