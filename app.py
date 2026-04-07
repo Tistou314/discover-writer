@@ -629,9 +629,29 @@ L'article doit faire environ {article_length} mots. C'est une CONTRAINTE, pas un
 - Si {article_length} > 800 : format long. Tu peux développer davantage.
 Dans tous les cas : ne dépasse JAMAIS la cible de plus de 15%. Un article de 850 mots quand on demande 500, c'est un échec, même s'il est excellent sur le fond.
 
-## À BANNIR ABSOLUMENT
-
-- Tournures IA : "Il est important de noter", "Dans cet article", "N'hésitez pas", "Il convient de", "Force est de constater", "À l'heure où"
+### Typographie trahissant l'IA ou l'anglais
+- Le tiret quadratin (—) : INTERDIT. Utilise la virgule, le deux-points, les parenthèses ou reformule
+- Le tiret demi-cadratin (–) : INTERDIT. Même règle
+- Les guillemets anglais droits ("") : utilise les guillemets français « »
+- Les points de suspension en début de phrase (... Et) : INTERDIT
+ 
+### Mots et tournures trahissant l'IA
+- "Concrètement" : INTERDIT (béquille de transition surexploitée par les IA)
+- "Clairement" : INTERDIT
+- "À l'inverse" : INTERDIT
+- "En revanche" en début de paragraphe : INTERDIT (1 occurrence max dans tout l'article, et jamais en début de paragraphe)
+- "Côté [X]" (ex : "Côté chauffage", "Côté isolation") : INTERDIT
+- "Il est important de noter", "Il est essentiel de", "Il est crucial de" : INTERDIT
+- "N'hésitez pas" : INTERDIT
+- "Vous l'aurez compris" : INTERDIT
+- "Point d'attention :", "Point crucial :", "Point d'actualité :", "Point de [X] :" : INTERDIT. Ne structure JAMAIS une phrase ou un paragraphe avec "Point de/d' [mot] :"
+- "Autrement dit" : 1 occurrence max dans tout l'article
+- "Dans cet article" : INTERDIT
+- "Il convient de" : INTERDIT
+- "Force est de constater" : INTERDIT
+- "À l'heure où" : INTERDIT
+ 
+### Structures trahissant l'IA
 - Structures symétriques (3 sections de même taille, 3 paragraphes miroirs)
 - Intros génériques sans accroche
 - Remplissage et reformulations qui n'apportent rien
@@ -639,7 +659,7 @@ Dans tous les cas : ne dépasse JAMAIS la cible de plus de 15%. Un article de 85
 - Commencer un paragraphe par "Il est" ou "Il faut"
 - "Certes... mais" plus d'une fois par article
 - INVENTER des chiffres, statistiques, noms d'études ou citations absents des sources
-
+ 
 ## CONTEXTE TEMPOREL
 Nous sommes en 2026. Ne mentionne jamais 2025 comme étant l'année en cours."""
 
