@@ -578,11 +578,21 @@ Tu rédiges un article journalistique, pas un texte créatif. La précision fact
 
 - **Ne cite que des chiffres, dates, noms et faits présents TEXTUELLEMENT dans les sources fournies.** Si une info n'est pas dans les sources, ne l'invente pas.
 - **INTERDIT DE CALCULER, EXTRAPOLER OU ARRONDIR DES CHIFFRES.** Ne fais jamais de calcul à partir de données sources pour en déduire un nouveau chiffre (ex : appliquer un taux de revalorisation à un barème ancien pour obtenir un barème "à jour"). Si le chiffre exact n'est pas dans les sources, ne le donne pas.
-- **Si tu n'as pas de chiffre précis, ne fabrique pas de pourcentage ou de statistique.** Utilise des formulations qui renvoient à la source officielle : "selon les barèmes officiels de l'Anah", "consultez le simulateur sur maprimerenov.gouv.fr", "les plafonds varient selon la composition du foyer et la localisation".
-- **Pour les barèmes, grilles tarifaires, seuils de revenus** : ne les cite que si tu les trouves mot pour mot dans les sources. Sinon, décris le mécanisme général et renvoie vers la source officielle du sujet. Un tableau avec des chiffres faux est pire qu'un paragraphe qui renvoie vers le site de référence.
+- **Si tu n'as pas de chiffre précis, ne fabrique pas de pourcentage ou de statistique.** Utilise des formulations qui renvoient vers la source officielle du sujet. Un tableau avec des chiffres faux est pire qu'un paragraphe qui renvoie vers le site de référence.
+- **Pour les barèmes, grilles tarifaires, seuils de revenus** : ne les cite que si tu les trouves mot pour mot dans les sources. Sinon, décris le mécanisme général et renvoie vers la source officielle.
 - **Distingue les faits des interprétations.** Les faits viennent des sources. Tes mises en perspective doivent être formulées comme telles ("ce qui suggère que...", "on peut y voir...").
 - **En cas de doute sur un fait, formulation prudente** plutôt qu'affirmation.
 - **Chaque donnée chiffrée doit être contextualisée** : d'où elle vient (quel acteur, quelle source), à quelle période elle se rapporte.
+
+## LISTES ET CATÉGORIES — RÈGLE CRITIQUE
+
+Quand un sujet comporte plusieurs catégories, parcours, profils ou niveaux (ex : différentes formules, tranches, types de bénéficiaires) :
+
+- **Ne mélange JAMAIS les éléments d'une catégorie avec ceux d'une autre.** Avant de lister ce qui est éligible, autorisé ou inclus dans une catégorie, vérifie dans les sources que chaque élément appartient BIEN à cette catégorie précise — pas à une catégorie voisine.
+- **Mentionne TOUJOURS les exclusions.** Si certains profils, publics ou cas de figure sont exclus d'un dispositif, d'une offre ou d'une catégorie, c'est une info critique pour le lecteur. Ne l'omets jamais. Un lecteur qui croit être éligible alors qu'il ne l'est pas, c'est pire qu'un lecteur à qui tu dis "vérifiez votre éligibilité".
+- **Ne fabrique AUCUN item de liste.** Chaque élément d'une énumération (travaux éligibles, documents requis, conditions à remplir, etc.) doit figurer explicitement dans les sources. N'ajoute pas un item parce qu'il te semble logique ou plausible.
+- **Si un élément a changé récemment** (ajouté, retiré, modifié), signale-le explicitement. Les changements récents sont l'info la plus précieuse pour le lecteur.
+- **Vérifie la cohérence interne.** Si tu écris dans un paragraphe qu'un élément est exclu, ne le liste pas comme éligible dans un autre paragraphe. Relis ton article avant de le finaliser pour traquer ces contradictions.
 
 ## LONGUEUR
 
@@ -728,7 +738,13 @@ RÈGLE SPÉCIALE CHIFFRES ET DONNÉES :
 - Pour chaque donnée chiffrée de l'article (barème, seuil, plafond, montant, pourcentage, date), vérifie qu'elle apparaît EXACTEMENT et TEXTUELLEMENT dans au moins une source.
 - Un chiffre "proche", "plausible" ou "cohérent avec une revalorisation" n'est PAS confirmé. Marque-le ❌ INEXACT ou ⚠️ NON SOURCÉ.
 - Si un chiffre de l'article diffère même légèrement d'une source (ex : 17 363 € dans l'article vs 17 173 € dans la source), c'est une ERREUR, pas un arrondi acceptable.
-- Dans la version corrigée, remplace les chiffres non confirmés par une formulation qui renvoie à la source officielle, ou par le chiffre exact trouvé dans les sources. Ne laisse JAMAIS un chiffre douteux dans l'article corrigé."""
+- Dans la version corrigée, remplace les chiffres non confirmés par une formulation qui renvoie à la source officielle, ou par le chiffre exact trouvé dans les sources. Ne laisse JAMAIS un chiffre douteux dans l'article corrigé.
+
+RÈGLE SPÉCIALE LISTES, CATÉGORIES ET EXCLUSIONS :
+- Quand l'article liste des éléments éligibles, autorisés ou inclus dans une catégorie (travaux, profils, bénéficiaires, produits...), vérifie que CHAQUE ITEM de la liste appartient bien à cette catégorie dans les sources. Un item qui appartient à une catégorie voisine est une ERREUR.
+- Vérifie les EXCLUSIONS : si les sources indiquent que certains profils, publics ou cas sont exclus d'un dispositif, d'une offre ou d'une catégorie, et que l'article ne le mentionne pas, c'est une OMISSION MAJEURE. Un lecteur qui croit être éligible alors qu'il ne l'est pas subira un refus de dossier.
+- Vérifie la COHÉRENCE INTERNE : si l'article dit dans un paragraphe qu'un élément est exclu, puis le liste comme éligible dans un autre paragraphe, c'est une ERREUR à signaler et corriger.
+- Si l'article affirme qu'une règle a changé (ex : "passé de X à Y en 2026"), vérifie que ce changement est confirmé dans les sources. Une évolution inventée est aussi grave qu'un chiffre inventé."""
 
     user_prompt = f"""Voici un article sur "{keyword}". Vérifie-le contre les sources d'actualité ci-dessous, contrôle sa complétude, puis produis la version corrigée.
 
